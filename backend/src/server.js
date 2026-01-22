@@ -1,5 +1,6 @@
 require("dotenv").config();
 require("./utils/db"); 
+require("./scheduler/reminderScheduler");
 const app = require("./app");
 
 const PORT = process.env.PORT || 5000;
