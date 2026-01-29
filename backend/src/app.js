@@ -4,6 +4,7 @@ const authRoutes = require("./routes/authRoutes");
 const authenticate = require("./middleware/authMiddleware");
 const authorizeRole = require("./middleware/roleMiddleware");
 const prescriptionRoutes = require("./routes/prescriptionRoutes");
+const labRoutes = require("./routes/labRoutes");
 
 const app = express();
 
@@ -11,6 +12,7 @@ app.use(cors());
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/prescriptions", prescriptionRoutes);
+app.use("/api/labs", labRoutes);
 
 app.get("/", (req, res) => {
   res.send("MedTrack Backend Running");
