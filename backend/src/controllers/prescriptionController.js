@@ -1,3 +1,5 @@
+const pool = require("../utils/db.js"); // or correct path
+
 const {
   createPrescription,
   addMedicine,
@@ -46,3 +48,21 @@ exports.getMyMedicines = async (req, res) => {
   const data = await getMedicinesForPatient(req.user.id);
   res.json(data);
 };
+
+exports.getDoctorPrescriptions = async (req, res) => {
+  try {
+    const doctorId = req.user.id;
+
+    const result = await pool.query(
+      "SELECT * FROM prescriptions WHERE doctor_id = $1",
+      [doctorId]
+    );
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error("Error fetching doctor prescriptions:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
