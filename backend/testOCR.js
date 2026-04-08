@@ -6,7 +6,7 @@ const os = require("os");
 (async () => {
   try {
     // Path to your uploaded lab report PDF
-    const inputFilePath = "uploads/labs/lab_1770658694006_973842854.pdf";
+    const inputFilePath = "uploads/labs/lab_1775045148459_215582871.pdf";
 
     console.log("Starting OCR extraction...");
     console.log("Input file:", inputFilePath);

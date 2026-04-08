@@ -1,7 +1,6 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
   "main": "index.js",
   "scripts": {
     "start": "node src/server.js",
@@ -13,19 +12,24 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "axios": "^1.14.0",
     "bcrypt": "^6.0.0",
+    "canvas": "^3.2.3",
     "cors": "^2.8.5",
+    "cron": "^4.4.0",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
+    "pdf-parse": "^1.1.1",
     "pdf-table-extractor": "^1.0.3",
-    "pdfjs-dist": "^5.4.530",
+    "pdfjs-dist": "^3.11.174",
     "pg": "^8.17.1",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"
-  }
+  },
+  "description": ""
 }
