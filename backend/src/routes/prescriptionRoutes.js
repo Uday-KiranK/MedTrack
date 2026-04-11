@@ -7,14 +7,17 @@ const authorizeRole = require("../middleware/roleMiddleware");
 const {
   createPrescription,
   getMyMedicines,
-  getDoctorPrescriptions   // 👈 add this
+  getDoctorPrescriptions,
+  editMedicine,
+  getMedicinesForDoctorPatient
 } = require("../controllers/prescriptionController");
 
 router.post("/", authenticate, authorizeRole("doctor"), createPrescription);
 
 router.get("/my", authenticate, authorizeRole("patient"), getMyMedicines);
 
-// 👇 NEW ROUTE
 router.get("/doctor", authenticate, authorizeRole("doctor"), getDoctorPrescriptions);
+router.get("/doctor/patient/:patientId", authenticate, authorizeRole("doctor"), getMedicinesForDoctorPatient);
+router.put("/medicine/:id", authenticate, authorizeRole("doctor"), editMedicine);
 
 module.exports = router;

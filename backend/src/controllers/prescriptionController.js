@@ -4,6 +4,8 @@ const {
   createPrescription,
   addMedicine,
   getMedicinesForPatient,
+  editMedicine,
+  getDoctorPatientPrescriptions
 } = require("../models/prescriptionModel");
 
 exports.createPrescription = async (req, res) => {
@@ -63,6 +65,40 @@ exports.getDoctorPrescriptions = async (req, res) => {
   } catch (err) {
     console.error("Error fetching doctor prescriptions:", err);
     res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.editMedicine = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = req.body; // should contain dosage, schedule_type, etc.
+
+    // Validate if the doctor owns it
+    const checkOwernship = await pool.query(
+      "SELECT p.doctor_id FROM medicines m JOIN prescriptions p ON m.prescription_id = p.id WHERE m.id = $1",
+      [id]
+    );
+
+    if (checkOwernship.rows.length === 0 || checkOwernship.rows[0].doctor_id !== req.user.id) {
+       return res.status(403).json({ message: "Unauthorized to edit this medicine." });
+    }
+
+    const updated = await editMedicine(id, data);
+    res.json(updated);
+  } catch (error) {
+    console.error("Edit medicine error", error);
+    res.status(500).json({ error: "Server error editing medicine" });
+  }
+};
+
+exports.getMedicinesForDoctorPatient = async (req, res) => {
+  try {
+     const { patientId } = req.params;
+     const result = await getDoctorPatientPrescriptions(req.user.id, patientId);
+     res.json(result);
+  } catch (error) {
+     console.error("Fetch doctor-patient medicines error", error);
+     res.status(500).json({ error: "Server error fetching medicines" });
   }
 };
 

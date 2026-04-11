@@ -35,8 +35,34 @@ const getMedicinesForPatient = async (patientId) => {
   return res.rows;
 };
 
+const editMedicine = async (id, data) => {
+  const fields = Object.keys(data).map((key, i) => `${key} = $${i + 2}`).join(", ");
+  const values = [id, ...Object.values(data)];
+
+  const res = await pool.query(
+    `UPDATE medicines SET ${fields} WHERE id = $1 RETURNING *`,
+    values
+  );
+  return res.rows[0];
+};
+
+const getDoctorPatientPrescriptions = async (doctorId, patientId) => {
+  const res = await pool.query(
+    `
+    SELECT m.*, p.patient_id, p.doctor_id
+    FROM medicines m
+    JOIN prescriptions p ON p.id = m.prescription_id
+    WHERE p.doctor_id = $1 AND p.patient_id = $2
+    `,
+    [doctorId, patientId]
+  );
+  return res.rows;
+};
+
 module.exports = {
   createPrescription,
   addMedicine,
   getMedicinesForPatient,
+  editMedicine,
+  getDoctorPatientPrescriptions
 };

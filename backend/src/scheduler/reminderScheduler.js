@@ -14,7 +14,8 @@ cron.schedule("* * * * *", async () => {
     const times = resolveTimes(med);
 
     if (times.includes(currentTime)) {
-      console.log(`🔔 Reminder: Take ${med.medicine_name}`);
+      // console.log(`🔔 Reminder: Take ${med.medicine_name}`);
+      // Disabled backend spam: App handles alarms via PatientDashboard.js internally now.
     }
   }
 });
