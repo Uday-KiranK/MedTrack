@@ -25,9 +25,10 @@ const addMedicine = async (data) => {
 const getMedicinesForPatient = async (patientId) => {
   const res = await pool.query(
     `
-    SELECT m.*, p.patient_id
+    SELECT m.*, p.patient_id, d.name AS doctor_name
     FROM medicines m
     JOIN prescriptions p ON p.id = m.prescription_id
+    JOIN users d ON p.doctor_id = d.id
     WHERE p.patient_id = $1
     `,
     [patientId]
