@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View } from 'react-native';
 
@@ -14,20 +14,28 @@ import DoctorDashboard from '../screens/DoctorDashboard';
 
 const Stack = createNativeStackNavigator();
 
-export default function AppNavigator() {
-  const { userToken, userInfo, isLoading } = useContext(AuthContext);
+const TransparentTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: 'transparent',
+  },
+};
 
-  if (isLoading) {
+export default function AppNavigator() {
+  const { userToken, userInfo, isSplashLoading } = useContext(AuthContext);
+
+  if (isSplashLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' }}>
         <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <NavigationContainer theme={TransparentTheme}>
+      <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
         {userToken == null ? (
           // Auth Stack
           <>

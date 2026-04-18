@@ -14,7 +14,8 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [userToken, setUserToken] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSplashLoading, setIsSplashLoading] = useState(true);
 
   // Re-hydrate token from async storage
   const loadToken = async () => {
@@ -31,7 +32,7 @@ export const AuthProvider = ({ children }) => {
       await AsyncStorage.removeItem('userToken');
       delete axios.defaults.headers.common['Authorization'];
     } finally {
-      setIsLoading(false);
+      setIsSplashLoading(false);
     }
   };
 
@@ -146,7 +147,8 @@ export const AuthProvider = ({ children }) => {
       register,
       userToken,
       userInfo,
-      isLoading
+      isLoading,
+      isSplashLoading
     }}>
       {children}
     </AuthContext.Provider>

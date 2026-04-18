@@ -1,12 +1,14 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 
 import { AuthContext, API_URL } from '../context/AuthContext';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
 
 export default function DoctorDashboard() {
+  const { t, i18n } = useTranslation();
   const { logout, userInfo } = useContext(AuthContext);
   const [tab, setTab] = useState('create'); // 'create' | 'patients'
 
@@ -155,13 +157,33 @@ export default function DoctorDashboard() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Dr. {userInfo?.name}</Text>
-          <Text style={styles.subtitle}>MedTrack Physician Space</Text>
+        <View style={styles.headerTop}>
+          <View style={styles.brandRow}>
+             <Image source={require('../../assets/icon.png')} style={styles.logoImage} />
+             <View style={{ flexShrink: 1 }}>
+               <Text style={styles.greeting}>Dr. {userInfo?.name}</Text>
+               <Text style={styles.subtitle}>MedTrack Physician Space</Text>
+             </View>
+          </View>
+          <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+            <Text style={styles.logoutText}>{t('Logout')}</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        <View style={styles.pickerWrapper}>
+           <View style={styles.pickerContainerSmall}>
+             <Picker
+               selectedValue={i18n.language}
+               style={{ height: 40, width: '100%', color: COLORS.text, backgroundColor: '#E6F4F1' }}
+               onValueChange={(itemValue) => i18n.changeLanguage(itemValue)}
+             >
+               <Picker.Item label="EN (English)" value="en" color="#000" />
+               <Picker.Item label="HI (हिंदी)" value="hi" color="#000" />
+               <Picker.Item label="TA (தமிழ்)" value="ta" color="#000" />
+               <Picker.Item label="TE (తెలుగు)" value="te" color="#000" />
+               <Picker.Item label="KN (ಕನ್ನಡ)" value="kn" color="#000" />
+             </Picker>
+           </View>
+        </View>
       </View>
 
       {/* Tabs */}
@@ -170,13 +192,13 @@ export default function DoctorDashboard() {
           style={[styles.tab, tab === 'create' && styles.activeTab]}
           onPress={() => {setTab('create'); setSelectedPatient(null); setEditingMedicine(null);}}
         >
-          <Text style={[styles.tabText, tab === 'create' && styles.activeTabText]}>New Prescription</Text>
+          <Text style={[styles.tabText, tab === 'create' && styles.activeTabText]}>{t('New Prescription')}</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, tab === 'patients' && styles.activeTab]}
           onPress={() => setTab('patients')}
         >
-          <Text style={[styles.tabText, tab === 'patients' && styles.activeTabText]}>My Patients</Text>
+          <Text style={[styles.tabText, tab === 'patients' && styles.activeTabText]}>{t('My Patients')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -184,22 +206,22 @@ export default function DoctorDashboard() {
         {tab === 'create' ? (
           <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
             <View style={styles.formCard}>
-               <Text style={styles.sectionTitle}>Prescribe Medication</Text>
+               <Text style={styles.sectionTitle}>{t('New Prescription')}</Text>
                
-               <Text style={styles.label}>Select Patient</Text>
+               <Text style={styles.label}>{t('Select Patient')}</Text>
                <View style={styles.pickerContainer}>
                  <Picker
                    selectedValue={patientId}
                    onValueChange={(itemValue) => setPatientId(itemValue)}
                  >
-                   <Picker.Item label="-- Select Patient --" value="" />
+                   <Picker.Item label={t("-- Select Patient --")} value="" />
                    {myPatients.map(p => (
                      <Picker.Item key={p.id} label={`${p.name} (${p.phone})`} value={p.id.toString()} />
                    ))}
                  </Picker>
                </View>
 
-               <Text style={styles.label}>Medicine Name</Text>
+               <Text style={styles.label}>{t('Medicine Name')}</Text>
                <TextInput 
                  style={styles.input} 
                  placeholder="e.g. Paracetamol" 
@@ -207,7 +229,7 @@ export default function DoctorDashboard() {
                  onChangeText={setMedicineName}
                />
 
-               <Text style={styles.label}>Dosage</Text>
+               <Text style={styles.label}>{t('Dosage')}</Text>
                <TextInput 
                  style={styles.input} 
                  placeholder="e.g. 500mg" 
@@ -217,17 +239,17 @@ export default function DoctorDashboard() {
 
                <View style={styles.row}>
                  <View style={{flex: 1, marginRight: 8}}>
-                    <Text style={styles.label}>Schedule</Text>
+                    <Text style={styles.label}>{t('Schedule')}</Text>
                     <View style={styles.pickerContainer}>
                       <Picker val={scheduleType} selectedValue={scheduleType} onValueChange={setScheduleType}>
-                        <Picker.Item label="Daily" value="daily" />
-                        <Picker.Item label="Weekly" value="weekly" />
-                        <Picker.Item label="Monthly" value="monthly" />
+                        <Picker.Item label={t("Daily")} value="daily" />
+                        <Picker.Item label={t("Weekly")} value="weekly" />
+                        <Picker.Item label={t("Monthly")} value="monthly" />
                       </Picker>
                     </View>
                  </View>
                  <View style={{flex: 1, marginLeft: 8}}>
-                    <Text style={styles.label}>Days</Text>
+                    <Text style={styles.label}>{t('Days')}</Text>
                     <TextInput 
                       style={styles.input} 
                       value={durationDays}
@@ -239,17 +261,17 @@ export default function DoctorDashboard() {
 
                <View style={styles.row}>
                  <View style={{flex: 1, marginRight: 8}}>
-                    <Text style={styles.label}>Food Instructions</Text>
+                    <Text style={styles.label}>{t('Food Instructions')}</Text>
                     <View style={styles.pickerContainer}>
                       <Picker selectedValue={foodInstruction} onValueChange={setFoodInstruction}>
-                         <Picker.Item label="Before Food" value="Before Food" />
-                         <Picker.Item label="After Food" value="After Food" />
-                         <Picker.Item label="Empty Stomach" value="Empty Stomach" />
+                         <Picker.Item label={t("Before Food")} value="Before Food" />
+                         <Picker.Item label={t("After Food")} value="After Food" />
+                         <Picker.Item label={t("Empty Stomach")} value="Empty Stomach" />
                       </Picker>
                     </View>
                  </View>
                  <View style={{flex: 1, marginLeft: 8}}>
-                    <Text style={styles.label}>Alarm Time(HH:MM)</Text>
+                    <Text style={styles.label}>{t('Alarm Time(HH:MM)')}</Text>
                     <TextInput 
                       style={styles.input} 
                       placeholder="e.g. 08:30" 
@@ -260,7 +282,7 @@ export default function DoctorDashboard() {
                </View>
 
                <TouchableOpacity style={styles.primaryButton} onPress={handleCreatePrescription} disabled={creating}>
-                 {creating ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryButtonText}>Send Prescription</Text>}
+                 {creating ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryButtonText}>{t('Send Prescription')}</Text>}
                </TouchableOpacity>
             </View>
           </ScrollView>
@@ -268,63 +290,63 @@ export default function DoctorDashboard() {
            <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
              <View style={styles.formCard}>
                 <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                   <Text style={styles.sectionTitle}>Edit Prescription</Text>
+                   <Text style={styles.sectionTitle}>{t('Edit')}</Text>
                    <TouchableOpacity onPress={() => setEditingMedicine(null)}>
-                      <Text style={{color: COLORS.primary}}>Cancel</Text>
+                      <Text style={{color: COLORS.primary}}>{t('Cancel')}</Text>
                    </TouchableOpacity>
                 </View>
 
-                <Text style={styles.label}>Medicine Name</Text>
+                <Text style={styles.label}>{t('Medicine Name')}</Text>
                 <TextInput style={styles.input} value={editingMedicine.medicine_name} onChangeText={(val) => setEditingMedicine({...editingMedicine, medicine_name: val})} />
 
-                <Text style={styles.label}>Dosage</Text>
+                <Text style={styles.label}>{t('Dosage')}</Text>
                 <TextInput style={styles.input} value={editingMedicine.dosage} onChangeText={(val) => setEditingMedicine({...editingMedicine, dosage: val})} />
 
                 <View style={styles.row}>
                   <View style={{flex: 1, marginRight: 8}}>
-                     <Text style={styles.label}>Schedule</Text>
+                     <Text style={styles.label}>{t('Schedule')}</Text>
                      <View style={styles.pickerContainer}>
                        <Picker selectedValue={editingMedicine.schedule_type} onValueChange={(val) => setEditingMedicine({...editingMedicine, schedule_type: val})}>
-                         <Picker.Item label="Daily" value="daily" />
-                         <Picker.Item label="Weekly" value="weekly" />
-                         <Picker.Item label="Monthly" value="monthly" />
+                         <Picker.Item label={t("Daily")} value="daily" />
+                         <Picker.Item label={t("Weekly")} value="weekly" />
+                         <Picker.Item label={t("Monthly")} value="monthly" />
                        </Picker>
                      </View>
                   </View>
                   <View style={{flex: 1, marginLeft: 8}}>
-                     <Text style={styles.label}>Days</Text>
+                     <Text style={styles.label}>{t('Days')}</Text>
                      <TextInput style={styles.input} value={editingMedicine.duration_days} onChangeText={(val) => setEditingMedicine({...editingMedicine, duration_days: val})} keyboardType="numeric" />
                   </View>
                 </View>
 
                 <View style={styles.row}>
                   <View style={{flex: 1, marginRight: 8}}>
-                     <Text style={styles.label}>Food Instructions</Text>
+                     <Text style={styles.label}>{t('Food Instructions')}</Text>
                      <View style={styles.pickerContainer}>
                        <Picker selectedValue={editingMedicine.food_instruction} onValueChange={(val) => setEditingMedicine({...editingMedicine, food_instruction: val})}>
-                          <Picker.Item label="Before Food" value="Before Food" />
-                          <Picker.Item label="After Food" value="After Food" />
-                          <Picker.Item label="Empty Stomach" value="Empty Stomach" />
+                          <Picker.Item label={t("Before Food")} value="Before Food" />
+                          <Picker.Item label={t("After Food")} value="After Food" />
+                          <Picker.Item label={t("Empty Stomach")} value="Empty Stomach" />
                        </Picker>
                      </View>
                   </View>
                   <View style={{flex: 1, marginLeft: 8}}>
-                     <Text style={styles.label}>Alarm Time(HH:MM)</Text>
+                     <Text style={styles.label}>{t('Alarm Time(HH:MM)')}</Text>
                      <TextInput style={styles.input} value={editingMedicine.custom_times} onChangeText={(val) => setEditingMedicine({...editingMedicine, custom_times: val})} />
                   </View>
                 </View>
 
                 <TouchableOpacity style={styles.primaryButton} onPress={handleSaveEdit}>
-                  <Text style={styles.primaryButtonText}>Save Changes</Text>
+                  <Text style={styles.primaryButtonText}>{t('Save Changes')}</Text>
                 </TouchableOpacity>
              </View>
            </ScrollView>
         ) : selectedPatient ? (
            <View style={{ flex: 1 }}>
               <TouchableOpacity style={{ marginBottom: 16 }} onPress={handleBackToPatients}>
-                 <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>← Back to Patients</Text>
+                 <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>← {t('Back to Patients')}</Text>
               </TouchableOpacity>
-              <Text style={styles.h3}>Medicines for {selectedPatient.name}</Text>
+              <Text style={styles.h3}>{t('Medicines for ')}{selectedPatient.name}</Text>
               
               {loadingPatientMeds ? (
                 <ActivityIndicator size="large" color="#1A9988" style={{ marginTop: 20 }} />
@@ -337,32 +359,32 @@ export default function DoctorDashboard() {
                        <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
                           <Text style={styles.medName}>{item.medicine_name}</Text>
                           <TouchableOpacity onPress={() => startEdit(item)}>
-                             <Text style={{color: COLORS.primary, fontWeight: 'bold'}}>Edit</Text>
+                             <Text style={{color: COLORS.primary, fontWeight: 'bold'}}>{t('Edit')}</Text>
                           </TouchableOpacity>
                        </View>
-                       <Text style={styles.medDetail}>Dosage: {item.dosage}</Text>
-                       <Text style={styles.medDetail}>Schedule: {item.schedule_type} ({item.duration_days} days)</Text>
+                       <Text style={styles.medDetail}>{t('Dosage: ')}{item.dosage}</Text>
+                       <Text style={styles.medDetail}>{t('Schedule: ')}{item.schedule_type ? t(item.schedule_type.toLowerCase()) : ''} ({item.duration_days} {t('Days')})</Text>
                        {item.custom_times && <Text style={styles.medDetail}>Time: {item.custom_times.join(', ')}</Text>}
                      </View>
                   )}
-                  ListEmptyComponent={<Text style={{ marginTop: 20 }}>No medicines prescribed by you for this patient.</Text>}
+                  ListEmptyComponent={<Text style={{ marginTop: 20 }}>{t('No active prescriptions.')}</Text>}
                 />
               )}
            </View>
         ) : (
           <View style={{ flex: 1 }}>
             <View style={styles.addPatientCard}>
-               <Text style={styles.h3}>Add Existing Patient</Text>
+               <Text style={styles.h3}>{t('Add Existing Patient')}</Text>
                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                   <TextInput 
                     style={[styles.input, { flex: 1, marginBottom: 0 }]} 
-                    placeholder="Patient Phone No." 
+                    placeholder={t("Patient Phone No.")} 
                     value={addPatientPhone}
                     onChangeText={setAddPatientPhone}
                     keyboardType="phone-pad"
                   />
                   <TouchableOpacity style={styles.addButton} onPress={handleAddPatient} disabled={addingPatient}>
-                    {addingPatient ? <ActivityIndicator color="#FFF"/> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Add</Text>}
+                    {addingPatient ? <ActivityIndicator color="#FFF"/> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('Add')}</Text>}
                   </TouchableOpacity>
                </View>
             </View>
@@ -378,13 +400,13 @@ export default function DoctorDashboard() {
                     <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
                        <View>
                           <Text style={styles.medName}>{item.name}</Text>
-                          <Text style={styles.medDetail}>Phone: {item.phone}</Text>
+                          <Text style={styles.medDetail}>{t('Phone: ')}{item.phone}</Text>
                        </View>
                        <Text style={{color: COLORS.primary, fontSize: 24}}>{'>'}</Text>
                     </View>
                   </TouchableOpacity>
                 )}
-                ListEmptyComponent={<Text style={styles.emptyText}>No patients assigned yet.</Text>}
+                ListEmptyComponent={<Text style={styles.emptyText}>{t('No patients assigned yet.')}</Text>}
               />
             )}
           </View>
@@ -400,10 +422,28 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 60,
     backgroundColor: COLORS.surface,
+    flexDirection: 'column',
+    ...SHADOWS.small,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    ...SHADOWS.small,
+    alignItems: 'center',
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 12
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flexShrink: 1,
+    flexWrap: 'wrap',
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
+    resizeMode: 'contain'
   },
   greeting: { ...TYPOGRAPHY.h2, color: '#1A9988' }, 
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
@@ -415,6 +455,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   logoutText: { color: COLORS.error, fontWeight: '600' },
+  pickerWrapper: {
+    width: '100%'
+  },
+  pickerContainerSmall: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
   tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,

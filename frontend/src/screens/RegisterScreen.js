@@ -1,9 +1,12 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import { useTranslation } from 'react-i18next';
 import { AuthContext } from '../context/AuthContext';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
 
 export default function RegisterScreen({ navigation }) {
+  const { t, i18n } = useTranslation();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -37,10 +40,10 @@ export default function RegisterScreen({ navigation }) {
     return (
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.content}>
-          <Text style={styles.title}>Verify OTP</Text>
-          <Text style={styles.subtitle}>Check your terminal (simulated SMS) for the OTP.</Text>
+          <Text style={styles.title}>{t('Verify OTP')}</Text>
+          <Text style={styles.subtitle}>{t('Check your terminal (simulated SMS) for the OTP.')}</Text>
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Enter 4-digit OTP</Text>
+            <Text style={styles.label}>{t('Enter 4-digit OTP')}</Text>
             <TextInput
               style={styles.input}
               placeholder="1234"
@@ -51,7 +54,7 @@ export default function RegisterScreen({ navigation }) {
             />
           </View>
           <TouchableOpacity style={styles.button} onPress={handleVerifyOtp} disabled={isLoading}>
-            {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Verify & Login</Text>}
+            {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>{t('Verify & Login')}</Text>}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -64,24 +67,44 @@ export default function RegisterScreen({ navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.content}>
-        <Text style={styles.title}>Create Account</Text>
-        <Text style={styles.subtitle}>Join MedTrack to manage you health better.</Text>
+        <View style={{flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16}}>
+           <Text style={{marginRight: 8, color: COLORS.textSecondary, fontWeight: '600'}}>{t('Change Lang:')}</Text>
+           <View style={styles.pickerContainerSmall}>
+             <Picker
+               selectedValue={i18n.language}
+               style={{ height: 40, width: 130, color: COLORS.text, backgroundColor: '#E6F4F1' }}
+               onValueChange={(itemValue) => i18n.changeLanguage(itemValue)}
+             >
+               <Picker.Item label="EN" value="en" color="#000" />
+               <Picker.Item label="HI (हिंदी)" value="hi" color="#000" />
+               <Picker.Item label="TA (தமிழ்)" value="ta" color="#000" />
+               <Picker.Item label="TE (తెలుగు)" value="te" color="#000" />
+               <Picker.Item label="KN (ಕನ್ನಡ)" value="kn" color="#000" />
+             </Picker>
+           </View>
+        </View>
+
+        <View style={{alignItems: 'center', marginBottom: 24}}>
+           <Image source={require('../../assets/icon.png')} style={styles.logoImage} />
+           <Text style={[styles.title, { textAlign: 'center' }]}>{t('Create Account')}</Text>
+           <Text style={[styles.subtitle, { textAlign: 'center' }]}>{t('Join MedTrack to manage you health better.')}</Text>
+        </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Full Name</Text>
+          <Text style={styles.label}>{t('Name')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter your name"
+            placeholder={t("Name")}
             value={name}
             onChangeText={setName}
           />
         </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Email Address</Text>
+          <Text style={styles.label}>{t('Email Address')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter your email"
+            placeholder={t("Email Address")}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -90,10 +113,10 @@ export default function RegisterScreen({ navigation }) {
         </View>
         
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Phone Number</Text>
+          <Text style={styles.label}>{t('Phone Number')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter your phone"
+            placeholder={t("Phone Number")}
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
@@ -101,10 +124,10 @@ export default function RegisterScreen({ navigation }) {
         </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Password</Text>
+          <Text style={styles.label}>{t('Password')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Create a password"
+            placeholder={t("Password")}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -117,13 +140,13 @@ export default function RegisterScreen({ navigation }) {
             style={[styles.roleButton, role === 'patient' && styles.roleButtonActive]}
             onPress={() => setRole('patient')}
           >
-            <Text style={[styles.roleText, role === 'patient' && styles.roleTextActive]}>Patient</Text>
+            <Text style={[styles.roleText, role === 'patient' && styles.roleTextActive]}>{t('Patient')}</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.roleButton, role === 'doctor' && styles.roleButtonActive]}
             onPress={() => setRole('doctor')}
           >
-            <Text style={[styles.roleText, role === 'doctor' && styles.roleTextActive]}>Doctor</Text>
+            <Text style={[styles.roleText, role === 'doctor' && styles.roleTextActive]}>{t('Doctor')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -135,14 +158,14 @@ export default function RegisterScreen({ navigation }) {
           {isLoading ? (
              <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.buttonText}>Register</Text>
+            <Text style={styles.buttonText}>{t('Register')}</Text>
           )}
         </TouchableOpacity>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
+          <Text style={styles.footerText}>{t('Already have an account?')} </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.footerLink}>Login</Text>
+            <Text style={styles.footerLink}>{t('Login')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -239,5 +262,25 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     color: COLORS.primary,
     fontWeight: '600',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 24,
+    flexWrap: 'wrap',
+    gap: 12
+  },
+  pickerContainerSmall: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
+    resizeMode: 'contain'
   }
 });

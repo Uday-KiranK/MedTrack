@@ -1,9 +1,13 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import { useTranslation } from 'react-i18next';
+
 import { AuthContext } from '../context/AuthContext';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
 
 export default function LoginScreen({ navigation }) {
+  const { t, i18n } = useTranslation();
   const [loginMethod, setLoginMethod] = useState('email'); // 'email' | 'phone'
   
   const [email, setEmail] = useState('');
@@ -43,7 +47,7 @@ export default function LoginScreen({ navigation }) {
     return (
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.content}>
-          <Text style={styles.title}>Verify OTP</Text>
+          <Text style={styles.title}>{t('Verify OTP')}</Text>
           <Text style={styles.subtitle}>Check your terminal for the OTP.</Text>
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Enter 4-digit OTP</Text>
@@ -60,7 +64,7 @@ export default function LoginScreen({ navigation }) {
             />
           </View>
           <TouchableOpacity style={styles.button} onPress={handleVerifyOtp} disabled={isLoading || otp.length !== 4}>
-            {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Verify & Login</Text>}
+            {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>{t('Verify OTP')}</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={{ marginTop: 16, alignItems: 'center' }} onPress={() => setShowOtp(false)}>
              <Text style={styles.footerLink}>Go Back</Text>
@@ -76,8 +80,28 @@ export default function LoginScreen({ navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.content}>
-        <Text style={styles.title}>MedTrack</Text>
-        <Text style={styles.subtitle}>Welcome back! Please login to your account.</Text>
+        <View style={{flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16}}>
+           <Text style={{marginRight: 8, color: COLORS.textSecondary, fontWeight: '600'}}>{t('Change Lang:')}</Text>
+           <View style={styles.pickerContainerSmall}>
+             <Picker
+               selectedValue={i18n.language}
+               style={{ height: 40, width: 130, color: COLORS.text, backgroundColor: '#E6F4F1' }}
+               onValueChange={(itemValue) => i18n.changeLanguage(itemValue)}
+             >
+               <Picker.Item label="EN" value="en" color="#000" />
+               <Picker.Item label="HI (हिंदी)" value="hi" color="#000" />
+               <Picker.Item label="TA (தமிழ்)" value="ta" color="#000" />
+               <Picker.Item label="TE (తెలుగు)" value="te" color="#000" />
+               <Picker.Item label="KN (ಕನ್ನಡ)" value="kn" color="#000" />
+             </Picker>
+           </View>
+        </View>
+
+        <View style={{alignItems: 'center', marginBottom: 24}}>
+           <Image source={require('../../assets/icon.png')} style={styles.logoImage} />
+           <Text style={[styles.title, { textAlign: 'center' }]}>{t('MedTrack')}</Text>
+           <Text style={[styles.subtitle, { textAlign: 'center' }]}>{t('welcome_back')}</Text>
+        </View>
 
         <View style={styles.toggleContainer}>
            <TouchableOpacity 
@@ -97,7 +121,7 @@ export default function LoginScreen({ navigation }) {
         {loginMethod === 'email' ? (
           <>
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email Address</Text>
+              <Text style={styles.label}>{t('Email Address')}</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Enter your email"
@@ -108,7 +132,7 @@ export default function LoginScreen({ navigation }) {
               />
             </View>
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={styles.label}>{t('Password')}</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Enter your password"
@@ -120,7 +144,7 @@ export default function LoginScreen({ navigation }) {
           </>
         ) : (
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Phone Number</Text>
+            <Text style={styles.label}>{t('Phone Number')}</Text>
             <TextInput
               style={styles.input}
               placeholder="Enter your phone"
@@ -139,14 +163,14 @@ export default function LoginScreen({ navigation }) {
           {isLoading ? (
              <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.buttonText}>{loginMethod === 'phone' ? 'Send OTP' : 'Login'}</Text>
+            <Text style={styles.buttonText}>{loginMethod === 'phone' ? t('Send OTP') : t('Login')}</Text>
           )}
         </TouchableOpacity>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
+          <Text style={styles.footerText}>{t("Don't have an account?")} </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={styles.footerLink}>Register</Text>
+            <Text style={styles.footerLink}>{t('Register')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -242,5 +266,25 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     color: COLORS.primary,
     fontWeight: '600',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 24,
+    flexWrap: 'wrap',
+    gap: 12
+  },
+  pickerContainerSmall: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
+    resizeMode: 'contain'
   }
 });

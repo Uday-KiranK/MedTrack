@@ -1,13 +1,18 @@
-import React, { useContext, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, ScrollView, Platform, Modal } from 'react-native';
+import React, { useContext, useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, ScrollView, Platform, Modal, Image } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import { Picker } from '@react-native-picker/picker';
+import { useTranslation } from 'react-i18next';
 import { Audio } from 'expo-av';
+import * as Speech from 'expo-speech';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 import { AuthContext, API_URL } from '../context/AuthContext';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
 
 export default function PatientDashboard() {
+  const { t, i18n } = useTranslation();
   const { logout, userInfo } = useContext(AuthContext);
   const [tab, setTab] = useState('prescriptions'); // 'prescriptions' | 'labs'
   
@@ -24,18 +29,40 @@ export default function PatientDashboard() {
   }, []);
 
   // Audio & Alarm state
-  const [sound, setSound] = useState();
+  const [sound, setSound] = useState(null);
   const [activeAlarm, setActiveAlarm] = useState(null);
   const [lastAlarmTime, setLastAlarmTime] = useState('');
+  const [selectedMedicine, setSelectedMedicine] = useState(null);
+  const speechIntervalRef = useRef(null);
 
   // Setup loop
-  const playSound = async () => {
+  const playSound = async (medItem) => {
     try {
-       const { sound } = await Audio.Sound.createAsync(
-         { uri: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' },
-         { shouldPlay: true, isLooping: true }
-       );
-       setSound(sound);
+       const customRingtone = await AsyncStorage.getItem('ringtone_' + medItem.id);
+       
+       if (customRingtone) {
+          const { sound: customSound } = await Audio.Sound.createAsync(
+            { uri: customRingtone },
+            { shouldPlay: true, isLooping: true }
+          );
+          setSound(customSound);
+       } else {
+          const { sound: defaultSound } = await Audio.Sound.createAsync(
+            { uri: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' },
+            { shouldPlay: true, isLooping: true }
+          );
+          setSound(defaultSound);
+       }
+
+       // Text To Speech Loop
+       const textToSpeak = `${t('Medication Time!')} ${t('Take:')} ${medItem.medicine_name}`;
+       const lang = i18n.language === 'en' ? 'en-IN' : `${i18n.language}-IN`;
+       
+       Speech.speak(textToSpeak, { language: lang });
+       speechIntervalRef.current = setInterval(() => {
+          Speech.speak(textToSpeak, { language: lang });
+       }, 5000);
+
     } catch(err) {
        console.log("Audio play error", err);
     }
@@ -47,6 +74,11 @@ export default function PatientDashboard() {
        await sound.unloadAsync();
        setSound(null);
     }
+    if (speechIntervalRef.current) {
+       clearInterval(speechIntervalRef.current);
+       speechIntervalRef.current = null;
+    }
+    Speech.stop();
     setActiveAlarm(null);
   }
 
@@ -69,7 +101,7 @@ export default function PatientDashboard() {
       if (triggeredMed) {
          setLastAlarmTime(currentHHMM);
          setActiveAlarm(triggeredMed);
-         playSound();
+         playSound(triggeredMed);
       }
     }, 10000); // Check every 10 seconds
 
@@ -113,6 +145,9 @@ export default function PatientDashboard() {
           name: fileToUpload.name,
         });
       }
+      
+      // Send the current language context so backend can leverage Sarvam AI 
+      formData.append('lang', i18n.language);
 
       const response = await axios.post(`${API_URL}/labs/upload`, formData, {
         headers: {
@@ -128,27 +163,66 @@ export default function PatientDashboard() {
     }
   };
 
+  const handlePickRingtone = async (medId) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'audio/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled) {
+        const fileUri = result.assets[0].uri;
+        await AsyncStorage.setItem('ringtone_' + medId, fileUri);
+        alert('Custom Ringtone Set successfully!');
+      }
+    } catch (err) {
+      console.log('Failed to pick audio', err);
+    }
+  };
+
   const renderMedicine = ({ item }) => (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={() => setSelectedMedicine(item)}>
       <Text style={styles.medName}>{item.medicine_name}</Text>
-      <Text style={styles.medDetail}>Dosage: {item.dosage}</Text>
-      <Text style={styles.medDetail}>Schedule: {item.schedule_type} ({item.duration_days} days)</Text>
-      <Text style={styles.medDetail}>Food: {item.food_instruction}</Text>
-      {item.instructions && <Text style={styles.medDetail}>Note: {item.instructions}</Text>}
-    </View>
+      <Text style={styles.medDetail}>{t('Dosage: ')}{item.dosage}</Text>
+      <Text style={styles.medDetail}>{t('Schedule: ')}{item.schedule_type ? t(item.schedule_type.toLowerCase()) : ''} ({item.duration_days} {t('Days')})</Text>
+      <Text style={styles.medDetail}>{t('Food: ')}{item.food_instruction ? t(item.food_instruction) : ''}</Text>
+      {item.instructions && <Text style={styles.medDetail}>{t('Note: ')}{item.instructions}</Text>}
+    </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hello, {userInfo?.name}</Text>
-          <Text style={styles.subtitle}>Patient ID: {userInfo?.id}</Text>
+         <View style={styles.headerTop}>
+           <View style={styles.brandRow}>
+             <Image source={require('../../assets/icon.png')} style={styles.logoImage} />
+             <View style={{ flexShrink: 1 }}>
+               <Text style={[styles.subtitle, { color: COLORS.primary, fontWeight: 'bold' }]}>
+                 {t('Patient Name:')} {userInfo?.name}
+               </Text>
+               <Text style={styles.subtitle}>{t('Patient ID:')} {userInfo?.id}</Text>
+             </View>
+          </View>
+          <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+            <Text style={styles.logoutText}>{t('Logout')}</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        <View style={styles.pickerWrapper}>
+           <View style={styles.pickerContainerSmall}>
+             <Picker
+               selectedValue={i18n.language}
+               style={{ height: 40, width: '100%', color: COLORS.text, backgroundColor: '#E6F4F1' }}
+               onValueChange={(itemValue) => i18n.changeLanguage(itemValue)}
+             >
+               <Picker.Item label="EN (English)" value="en" color="#000" />
+               <Picker.Item label="HI (हिंदी)" value="hi" color="#000" />
+               <Picker.Item label="TA (தமிழ்)" value="ta" color="#000" />
+               <Picker.Item label="TE (తెలుగు)" value="te" color="#000" />
+               <Picker.Item label="KN (ಕನ್ನಡ)" value="kn" color="#000" />
+             </Picker>
+           </View>
+        </View>
       </View>
 
       {/* Tabs */}
@@ -157,13 +231,13 @@ export default function PatientDashboard() {
           style={[styles.tab, tab === 'prescriptions' && styles.activeTab]}
           onPress={() => setTab('prescriptions')}
         >
-          <Text style={[styles.tabText, tab === 'prescriptions' && styles.activeTabText]}>My Prescriptions</Text>
+          <Text style={[styles.tabText, tab === 'prescriptions' && styles.activeTabText]}>{t('My Prescriptions')}</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, tab === 'labs' && styles.activeTab]}
           onPress={() => setTab('labs')}
         >
-          <Text style={[styles.tabText, tab === 'labs' && styles.activeTabText]}>Lab Reports</Text>
+          <Text style={[styles.tabText, tab === 'labs' && styles.activeTabText]}>{t('Lab Reports')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -178,14 +252,14 @@ export default function PatientDashboard() {
               keyExtractor={(item) => item.id.toString()}
               renderItem={renderMedicine}
               contentContainerStyle={{ paddingBottom: 20 }}
-              ListEmptyComponent={<Text style={styles.emptyText}>No active prescriptions.</Text>}
+              ListEmptyComponent={<Text style={styles.emptyText}>{t('No active prescriptions.')}</Text>}
             />
           )
         ) : (
           <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
             <View style={styles.uploadSection}>
-              <Text style={styles.sectionTitle}>Understand Your Lab Report</Text>
-              <Text style={styles.sectionSubtitle}>Upload a PDF or Image of your blood work, and our AI will translate it into simple language.</Text>
+              <Text style={styles.sectionTitle}>{t('Understand Your Lab Report')}</Text>
+              <Text style={styles.sectionSubtitle}>{t('Upload a PDF or Image of your lab report, and our AI will translate it into simple language.')}</Text>
               
               <TouchableOpacity 
                 style={styles.primaryButton}
@@ -195,20 +269,20 @@ export default function PatientDashboard() {
                 {uploadingLab ? (
                    <ActivityIndicator color="#FFF" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>Upload Report</Text>
+                  <Text style={styles.primaryButtonText}>{t('Upload Report')}</Text>
                 )}
               </TouchableOpacity>
             </View>
 
             {labSummary && (
               <View style={styles.summaryContainer}>
-                <Text style={styles.successTitle}>AI Summary Completed ✓</Text>
+                <Text style={styles.successTitle}>{t('AI Summary Completed')}</Text>
                 
                 <View style={styles.summaryBox}>
                   <Text style={styles.summaryText}>{labSummary.summary}</Text>
                 </View>
                 
-                <Text style={styles.disclaimer}>{labSummary.disclaimer}</Text>
+                <Text style={styles.disclaimer}>{t('Note:')} {t('disclaimer_text')}</Text>
               </View>
             )}
           </ScrollView>
@@ -220,16 +294,43 @@ export default function PatientDashboard() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={{fontSize: 40, marginBottom: 16}}>⏰</Text>
-            <Text style={styles.modalTitle}>Medication Time!</Text>
+            <Text style={styles.modalTitle}>{t('Medication Time!')}</Text>
             {activeAlarm && (
                <>
                  <Text style={styles.modalMedName}>{activeAlarm.medicine_name}</Text>
-                 <Text style={styles.modalDetail}>Take: {activeAlarm.dosage}</Text>
-                 <Text style={styles.modalDetail}>Instruction: {activeAlarm.food_instruction}</Text>
+                 <Text style={styles.modalDetail}>{t('Take:')} {activeAlarm.dosage}</Text>
+                 <Text style={styles.modalDetail}>{t('Instruction:')} {activeAlarm.food_instruction ? t(activeAlarm.food_instruction) : ''}</Text>
                </>
             )}
             <TouchableOpacity style={styles.dismissButton} onPress={stopSound}>
-               <Text style={styles.dismissText}>OK, I've taken it!</Text>
+               <Text style={styles.dismissText}>{t("OK, I've taken it!")}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Prescription Details Drill-Down Modal */}
+      <Modal visible={!!selectedMedicine} transparent={true} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{selectedMedicine?.medicine_name}</Text>
+            {selectedMedicine?.doctor_name && (
+               <Text style={[styles.modalDetail, { color: COLORS.primary, marginBottom: 16 }]}>
+                 {t('Prescribed by Dr.')} {selectedMedicine.doctor_name}
+               </Text>
+            )}
+            <Text style={styles.modalDetail}>{t('Dosage: ')}{selectedMedicine?.dosage}</Text>
+            <Text style={styles.modalDetail}>{t('Instruction:')} {selectedMedicine?.food_instruction ? t(selectedMedicine.food_instruction) : ''}</Text>
+
+            <TouchableOpacity 
+               style={[styles.primaryButton, { marginTop: 24 }]} 
+               onPress={() => handlePickRingtone(selectedMedicine?.id)}
+            >
+               <Text style={styles.primaryButtonText}>🎵 Set Custom Ringtone</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.dismissButton, { backgroundColor: COLORS.border }]} onPress={() => setSelectedMedicine(null)}>
+               <Text style={styles.dismissText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -245,10 +346,28 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 60,
     backgroundColor: COLORS.surface,
+    flexDirection: 'column',
+    ...SHADOWS.small,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    ...SHADOWS.small,
+    alignItems: 'center',
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 12
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flexShrink: 1,
+    flexWrap: 'wrap',
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
+    resizeMode: 'contain'
   },
   greeting: { ...TYPOGRAPHY.h2, color: COLORS.primary },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
@@ -260,6 +379,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   logoutText: { color: COLORS.error, fontWeight: '600' },
+  pickerWrapper: {
+    width: '100%'
+  },
+  pickerContainerSmall: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
   tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,

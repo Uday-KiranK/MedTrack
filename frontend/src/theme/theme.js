@@ -1,8 +1,8 @@
 export const COLORS = {
-  primary: '#0B5FEb',       // Vibrant medical blue
-  primaryLight: '#E8F1FF',  // Very soft blue for backgrounds
-  secondary: '#1A9988',     // Trustworthy teal
-  background: '#F8FAFC',    // Slate-50 - Ultra light grey for main app background
+  primary: '#1A9988',     // Teal
+  primaryLight: '#E6F4F1',
+  secondary: '#FFB84D',   // Warm Orange
+  background: 'transparent',
   surface: '#FFFFFF',       // Card backgrounds
   
   text: '#1E293B',          // Slate-800 - Main reading text
