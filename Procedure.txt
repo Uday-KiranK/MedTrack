@@ -1,0 +1,71 @@
+MedTrack: Setup and Usage Procedure
+===================================================
+
+This document outlines the step-by-step procedure required to launch the MedTrack platform locally on your machine and how to operate the mobile application for demonstration purposes.
+
+---------------------------------------------------
+PART 1: STARTING THE BACKEND SERVER
+---------------------------------------------------
+The backend houses the PostgreSQL database connection, AI parsing algorithms (Groq LLaMA-3), and the Sarvam AI Multilingual translation pipeline.
+
+1. Open your terminal or command prompt.
+2. Navigate into the backend directory:
+   cd backend
+3. Ensure all dependencies are installed:
+   npm install
+4. Ensure your PostgreSQL database is running and your `.env` file is complete with your `DATABASE_URL`, `JWT_SECRET`, `GROQ_API_KEY`, and `SARVAM_API_KEY`.
+5. Start the backend Node server:
+   npm run dev
+6. You should see a terminal message stating "Server initialized..." and "Connected to PostgreSQL". Keep this terminal open! Simulated OTP SMS messages will print here during authentication.
+
+---------------------------------------------------
+PART 2: STARTING THE FRONTEND (MOBILE APP)
+---------------------------------------------------
+The frontend is built on React Native and runs via the Expo CLI.
+
+1. Open a **new**, separate terminal window.
+2. Navigate into the frontend directory:
+   cd frontend
+3. Ensure all dependencies are installed:
+   npm install
+4. Start the Expo development server:
+   npm start
+5. A large QR code will appear in your terminal.
+6. Install the "Expo Go" app on your physical iPhone or Android device.
+   - For Android: Open Expo Go and choose "Scan QR Code".
+   - For iPhone: Open the default Camera app, hover over the QR code, and tap the yellow "Open in Expo Go" banner.
+7. The MedTrack app will bundle and open on your physical device.
+
+---------------------------------------------------
+PART 3: USING THE MEDTRACK APPLICATION
+---------------------------------------------------
+
+FLOW A: Doctor Registration & Prescribing
+1. Open the App and tap 'Register' down at the bottom.
+2. Select the "Doctor" toggle. Enter a mock Name, Email, Phone Number, and Password.
+3. Tap "Create Account".
+4. Check your Backend Terminal (from Part 1). You will see a mocked SMS text containing a 4-digit OTP.
+5. In the App, enter that 4-digit OTP and tap "Verify & Login".
+6. In the Doctor Dashboard, create a new profile for a Patient. Add a medication name, dosage amount, timeline (e.g., Daily), duration (in days), and essential food instructions (e.g., After Food, Empty Stomach).
+7. Submit the prescription. It is now cryptographically secured on the backend.
+
+FLOW B: Patient Experience & Alarms
+1. Log out of the Doctor profile.
+2. Log in using the exact phone number you just assigned to the patient (look at the terminal for their new OTP).
+3. Welcome to the Patient Dashboard! You will see the active medications the Doctor just assigned to you.
+4. **Alarms:** Because MedTrack utilizes background chronotherapeutic tracking, your phone will actively loop a loud Text-To-Speech (voice) notification and a ringtone when it is time to take a pill. This alert will violently persist every few seconds until you physically press "Dismiss" in the app interface.
+5. **Custom Ringtones:** If you dislike the default notification sound, you can click to select your own custom MP3 device ringtone which the app will bind natively!
+
+FLOW C: Multilingual AI Diagnostics (Sarvam AI)
+1. At any time in the app, look at the top right corner for the "Change Lang:" dropdown.
+2. You can actively shift the entire application's native language into English, Hindi, Tamil, Telugu, or Kannada!
+3. In the Patient Dashboard, scroll down and find "Upload Lab Report".
+4. Upload a standard medical PDF. 
+5. Our system will extract the raw text, scrub it of confidential Personal Identifiable Information (HIPAA-compliant sanitization), and ping LLaMa-3 via Groq to extract the complicated data.
+6. Sarvam AI will then seamlessly translate this highly complex diagnostic summary into a perfectly readable, conversational overview in the regional dialect you selected in step 2!
+
+---------------------------------------------------
+TROUBLESHOOTING
+---------------------------------------------------
+- Blank screen on Mobile? Make sure your phone and your computer are connected to the exact same Wi-Fi network!
+- Database errors? We created a script in the backend called `clear_db.js`. If you wish to wipe the database clean for a demonstration, simply run `node clear_db.js` in the backend terminal!

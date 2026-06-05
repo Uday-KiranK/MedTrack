@@ -87,7 +87,16 @@ const resources = {
       "monthly": "Monthly",
       "Don't have an account?": "Don't have an account?",
       "Note:": "Note:",
-      "disclaimer_text": "This is an informational AI-generated summary. It is NOT a medical diagnosis or treatment advice. Always consult your doctor for professional interpretation and next steps."
+      "disclaimer_text": "This is an informational AI-generated summary. It is NOT a medical diagnosis or treatment advice. Always consult your doctor for professional interpretation and next steps.",
+      "MedTrack Streak": "MedTrack Streak",
+      "View Full Calendar": "View Full Calendar",
+      "MedTrack Streak History": "MedTrack Streak History",
+      "Close": "Close",
+      "Taken": "Taken",
+      "Missed": "Missed",
+      "Inactive": "Inactive",
+      "Future": "Future",
+      "Start": "Start"
     }
   },
   hi: {
@@ -174,7 +183,16 @@ const resources = {
       "monthly": "मासिक",
       "Don't have an account?": "क्या आपके पास खाता नहीं है?",
       "Note:": "नोट:",
-      "disclaimer_text": "यह एक सूचनात्मक AI-जनित सारांश है। यह चिकित्सा निदान या उपचार सलाह नहीं है। व्यावसायिक व्याख्या और अगले चरणों के लिए हमेशा अपने डॉक्टर से परामर्श लें।"
+      "disclaimer_text": "यह एक सूचनात्मक AI-जनित सारांश है। यह चिकित्सा निदान या उपचार सलाह नहीं है। व्यावसायिक व्याख्या और अगले चरणों के लिए हमेशा अपने डॉक्टर से परामर्श लें।",
+      "MedTrack Streak": "मेडट्रैक स्ट्रीक (MedTrack Streak)",
+      "View Full Calendar": "पूरा कैलेंडर देखें",
+      "MedTrack Streak History": "मेडट्रैक स्ट्रीक इतिहास",
+      "Close": "बंद करें",
+      "Taken": "लिया गया",
+      "Missed": "छूट गया",
+      "Inactive": "निष्क्रिय",
+      "Future": "भविष्य",
+      "Start": "शुरू"
     }
   },
   ta: {
@@ -261,7 +279,16 @@ const resources = {
       "monthly": "மாதாந்திர",
       "Don't have an account?": "கணக்கு இல்லையா?",
       "Note:": "குறிப்பு:",
-      "disclaimer_text": "இது ஒரு தகவல் AI-உருவாக்கிய சுருக்கம். இது ஒரு மருத்துவ கண்டறிதல் அல்லது சிகிச்சை ஆலோசனை அல்ல. தொழில்முறை விளக்கம் மற்றும் அடுத்த படிகளுக்கு எப்போதும் உங்கள் மருத்துவரை அணுகவும்."
+      "disclaimer_text": "இது ஒரு தகவல் AI-உருவாக்கிய சுருக்கம். இது ஒரு மருத்துவ கண்டறிதல் அல்லது சிகிச்சை ஆலோசனை அல்ல. தொழில்முறை விளக்கம் மற்றும் அடுத்த படிகளுக்கு எப்போதும் உங்கள் மருத்துவரை அணுகவும்.",
+      "MedTrack Streak": "மெட்டிராக் ஸ்ட்ரீக் (MedTrack Streak)",
+      "View Full Calendar": "முழு காலெண்டரைக் காட்டு",
+      "MedTrack Streak History": "மெட்டிராக் ஸ்ட்ரீக் வரலாறு",
+      "Close": "மூடு",
+      "Taken": "எடுத்துக்கொள்ளப்பட்டது",
+      "Missed": "தவறியது",
+      "Inactive": "செயலற்றது",
+      "Future": "எதிர்காலம்",
+      "Start": "தொடக்கம்"
     }
   },
   te: {
@@ -348,7 +375,16 @@ const resources = {
       "monthly": "నెలవారీ",
       "Don't have an account?": "ఖాతా లేదా?",
       "Note:": "గమనిక:",
-      "disclaimer_text": "ఇది సమాచార AI- రూపొందించిన సారాంశం. ఇది వైద్య నిర్ధారణ లేదా చికిత్స సలహా కాదు. వృత్తిపరమైన వివరణ మరియు తదుపరి దశల కోసం ఎల్లప్పుడూ మీ వైద్యుడిని సంప్రదించండి."
+      "disclaimer_text": "ఇది సమాచార AI- రూపొందించిన సారాంశం. ఇది వైద్య నిర్ధారణ లేదా చికిత్స సలహా కాదు. వృత్తిపరమైన వివరణ మరియు తదుపరి దశల కోసం ఎల్లప్పుడూ మీ వైద్యుడిని సంప్రదించండి.",
+      "MedTrack Streak": "మెడ్‌ట్రాక్ స్ట్రీక్ (MedTrack Streak)",
+      "View Full Calendar": "పూర్తి క్యాలెండర్ చూడండి",
+      "MedTrack Streak History": "మెడ్‌ట్రాక్ స్ట్రీక్ చరిత్ర",
+      "Close": "మూసివేయి",
+      "Taken": "తీసుకున్నారు",
+      "Missed": "మిస్ అయ్యింది",
+      "Inactive": "క్రియాశీలకము కాని",
+      "Future": "భవిష్యత్తు",
+      "Start": "ప్రారంభం"
     }
   },
   kn: {
@@ -435,7 +471,16 @@ const resources = {
       "monthly": "ಮಾಸಿಕ",
       "Don't have an account?": "ಖಾತೆ ಇಲ್ಲವೇ?",
       "Note:": "ಸೂಚನೆ:",
-      "disclaimer_text": "ಇದು ಮಾಹಿತಿಯುಕ್ತ AI-ರಚಿತ ಸಾರಾಂಶವಾಗಿದೆ. ಇದು ವೈದ್ಯಕೀಯ ರೋಗನಿರ್ಣಯ ಅಥವಾ ಚಿಕಿತ್ಸಾ ಸಲಹೆಯಲ್ಲ. ವೃತ್ತಿಪರ ವ್ಯಾಖ್ಯಾನ ಮತ್ತು ಮುಂದಿನ ಹಂತಗಳಿಗಾಗಿ ಯಾವಾಗಲೂ ನಿಮ್ಮ ವೈದ್ಯರನ್ನು ಸಂಪರ್ಕಿಸಿ."
+      "disclaimer_text": "ಇದು ಮಾಹಿತಿಯುಕ್ತ AI-ರಚಿತ ಸಾರಾಂಶವಾಗಿದೆ. ಇದು ವೈದ್ಯಕೀಯ ರೋಗನಿರ್ಣಯ ಅಥವಾ ಚಿಕಿತ್ಸಾ ಸಲಹೆಯಲ್ಲ. ವೃತ್ತಿಪರ ವ್ಯಾಖ್ಯಾನ ಮತ್ತು ಮುಂದಿನ ಹಂತಗಳಿಗಾಗಿ ಯಾವಾಗಲೂ ನಿಮ್ಮ ವೈದ್ಯರನ್ನು ಸಂಪರ್ಕಿಸಿ.",
+      "MedTrack Streak": "ಮೆಡ್‌ಟ್ರ್ಯಾಕ್ ಸ್ಟ್ರೀಕ್ (MedTrack Streak)",
+      "View Full Calendar": "ಪೂರ್ಣ ಕ್ಯಾಲೆಂಡರ್ ವೀಕ್ಷಿಸಿ",
+      "MedTrack Streak History": "ಮೆಡ್‌ಟ್ರ್ಯಾಕ್ ಸ್ಟ್ರೀಕ್ ಇತಿಹಾಸ",
+      "Close": "ಮುಚ್ಚಿ",
+      "Taken": "ತೆಗೆದುಕೊಳ್ಳಲಾಗಿದೆ",
+      "Missed": "ತಪ್ಪಿಹೋಗಿದೆ",
+      "Inactive": "ನಿಷ್ಕ್ರಿಯ",
+      "Future": "ಭವಿಷ್ಯ",
+      "Start": "ಪ್ರಾರಂಭ"
     }
   }
 };

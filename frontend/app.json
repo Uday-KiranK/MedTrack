@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "MedTrack",
+    "slug": "medtrack",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,6 +16,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.udayk.medtrack",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -24,6 +25,14 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8e6e2c1d-2b0b-4cc9-bb5c-f79608ffd143"
+      }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }

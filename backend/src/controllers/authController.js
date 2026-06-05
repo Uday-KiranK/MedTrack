@@ -1,6 +1,7 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { createUser, findUserByEmail, findUserByPhone } = require("../models/userModel");
+const { sendOtpSms } = require("../utils/smsHelper");
 
 // Mock OTP Store (in real life use Redis or DB with expiry)
 const mockOtpStore = {};
@@ -30,16 +31,13 @@ exports.register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await createUser(name, email, phone, hashedPassword, role);
 
-    // Mock sending OTP
+    // Send OTP
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     mockOtpStore[user.phone] = otp;
-    
-    console.log(`\n========================================`);
-    console.log(`📱 SMS TO ${user.phone}: Your MedTrack OTP for Registration is ${otp}`);
-    console.log(`========================================\n`);
+    await sendOtpSms(user.phone, otp, "Registration");
 
     res.status(201).json({
-      message: "User registered successfully. OTP sent to terminal.",
+      message: "User registered successfully. OTP sent.",
       requiresOtp: true,
       phone: user.phone
     });
@@ -65,13 +63,10 @@ exports.login = async (req, res) => {
       // Generate OTP
       const otp = Math.floor(1000 + Math.random() * 9000).toString();
       mockOtpStore[user.phone] = otp;
-      
-      console.log(`\n========================================`);
-      console.log(`📱 SMS TO ${user.phone}: Your MedTrack OTP for Login is ${otp}`);
-      console.log(`========================================\n`);
+      await sendOtpSms(user.phone, otp, "Login");
 
       return res.json({ 
-        message: "OTP sent to terminal",
+        message: "OTP sent.",
         requiresOtp: true,
         phone: user.phone
       });

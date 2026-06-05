@@ -5,7 +5,8 @@ const {
   addMedicine,
   getMedicinesForPatient,
   editMedicine,
-  getDoctorPatientPrescriptions
+  getDoctorPatientPrescriptions,
+  recordIntake
 } = require("../models/prescriptionModel");
 
 exports.createPrescription = async (req, res) => {
@@ -102,3 +103,19 @@ exports.getMedicinesForDoctorPatient = async (req, res) => {
   }
 };
 
+exports.recordIntake = async (req, res) => {
+  try {
+    const { medicineId } = req.body;
+    const patientId = req.user.id;
+
+    if (!medicineId) {
+      return res.status(400).json({ message: "medicineId is required" });
+    }
+
+    const intake = await recordIntake(medicineId, patientId);
+    res.status(201).json({ message: "Intake recorded successfully", intake });
+  } catch (error) {
+    console.error("Record intake error", error);
+    res.status(500).json({ error: "Server error recording intake" });
+  }
+};

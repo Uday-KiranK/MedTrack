@@ -7,7 +7,7 @@ import { Platform } from 'react-native';
 // Dynamically connect to the proper IP depending on environment
 export const API_URL = Platform.OS === 'web' 
   ? 'http://localhost:5000/api'
-  : 'http://10.0.12.138:5000/api'; // Your laptop's exact Local Wi-Fi IP for Expo Go App
+  : 'http://192.168.1.41:5000/api'; // Your laptop's exact Local Wi-Fi IP for Expo Go App
 
 export const AuthContext = createContext();
 

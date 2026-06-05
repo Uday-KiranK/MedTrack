@@ -7,6 +7,16 @@ import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import * as Notifications from 'expo-notifications';
+
+// Setup background/foreground notification behaviour
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 import { AuthContext, API_URL } from '../context/AuthContext';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
@@ -19,6 +29,7 @@ export default function PatientDashboard() {
   // Prescriptions state
   const [medicines, setMedicines] = useState([]);
   const [loadingMeds, setLoadingMeds] = useState(false);
+  const [showCalendarMed, setShowCalendarMed] = useState(null);
 
   // Labs state
   const [uploadingLab, setUploadingLab] = useState(false);
@@ -30,19 +41,26 @@ export default function PatientDashboard() {
 
   // Audio & Alarm state
   const [sound, setSound] = useState(null);
-  const [activeAlarm, setActiveAlarm] = useState(null);
+  const [activeAlarms, setActiveAlarms] = useState([]);
   const [lastAlarmTime, setLastAlarmTime] = useState('');
   const [selectedMedicine, setSelectedMedicine] = useState(null);
   const speechIntervalRef = useRef(null);
 
   // Setup loop
-  const playSound = async (medItem) => {
+  const playSound = async (medItems) => {
     try {
-       const customRingtone = await AsyncStorage.getItem('ringtone_' + medItem.id);
+       let ringtoneUri = null;
+       for (const item of medItems) {
+          const customRingtone = await AsyncStorage.getItem('ringtone_' + item.id);
+          if (customRingtone) {
+             ringtoneUri = customRingtone;
+             break;
+          }
+       }
        
-       if (customRingtone) {
+       if (ringtoneUri) {
           const { sound: customSound } = await Audio.Sound.createAsync(
-            { uri: customRingtone },
+            { uri: ringtoneUri },
             { shouldPlay: true, isLooping: true }
           );
           setSound(customSound);
@@ -54,14 +72,15 @@ export default function PatientDashboard() {
           setSound(defaultSound);
        }
 
-       // Text To Speech Loop
-       const textToSpeak = `${t('Medication Time!')} ${t('Take:')} ${medItem.medicine_name}`;
+       // Text To Speech Loop (reads out all matching medicines)
+       const medNamesStr = medItems.map(m => m.medicine_name).join(', ');
+       const textToSpeak = `${t('Medication Time!')} ${t('Take:')} ${medNamesStr}`;
        const lang = i18n.language === 'en' ? 'en-IN' : `${i18n.language}-IN`;
        
        Speech.speak(textToSpeak, { language: lang });
        speechIntervalRef.current = setInterval(() => {
           Speech.speak(textToSpeak, { language: lang });
-       }, 5000);
+       }, 6000);
 
     } catch(err) {
        console.log("Audio play error", err);
@@ -79,12 +98,192 @@ export default function PatientDashboard() {
        speechIntervalRef.current = null;
     }
     Speech.stop();
-    setActiveAlarm(null);
+
+    // Record intakes for all active alarms
+    for (const alarm of activeAlarms) {
+       try {
+          await axios.post(`${API_URL}/prescriptions/intake`, { medicineId: alarm.id });
+       } catch (err) {
+          console.log("Failed to record intake log for", alarm.medicine_name, err.message);
+       }
+    }
+
+    setActiveAlarms([]);
+    fetchMedicines(); // Refresh so streak counts and visual status update immediately
   }
 
   useEffect(() => {
     return sound ? () => { sound.unloadAsync(); } : undefined;
   }, [sound]);
+
+  const isMedicineCompleted = (item) => {
+    if (!item.start_date) return false;
+    const start = new Date(item.start_date);
+    const now = new Date();
+    
+    let totalDays = item.duration_days;
+    if (item.schedule_type === 'weekly') {
+      totalDays = item.duration_days * 7;
+    } else if (item.schedule_type === 'monthly') {
+      totalDays = item.duration_days * 30;
+    }
+    
+    const end = new Date(start.getTime() + totalDays * 24 * 60 * 60 * 1000);
+    return now > end;
+  };
+
+  const getLocalDateString = (date) => {
+    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+  };
+
+  const calculateStreak = (intakes) => {
+    if (!intakes || intakes.length === 0) return 0;
+    const datesStr = intakes.map(d => getLocalDateString(new Date(d)));
+    const uniqueDates = Array.from(new Set(datesStr)).sort().reverse();
+    const todayStr = getLocalDateString(new Date());
+    const yesterdayStr = getLocalDateString(new Date(Date.now() - 24 * 60 * 60 * 1000));
+    
+    if (uniqueDates[0] !== todayStr && uniqueDates[0] !== yesterdayStr) {
+      return 0;
+    }
+    
+    let streak = 0;
+    let currentCheck = new Date(uniqueDates[0]);
+    
+    for (let i = 0; i < uniqueDates.length; i++) {
+      const expectedStr = getLocalDateString(currentCheck);
+      if (uniqueDates[i] === expectedStr) {
+        streak++;
+        currentCheck.setDate(currentCheck.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    return streak;
+  };
+
+  const renderWeeklyTracker = (intakes, startDateStr, durationDays, scheduleType) => {
+    const tracker = [];
+    const today = new Date();
+    
+    const intakeSet = new Set(intakes.map(d => getLocalDateString(new Date(d))));
+    const start = new Date(startDateStr);
+    
+    let totalDays = durationDays;
+    if (scheduleType === 'weekly') totalDays = durationDays * 7;
+    else if (scheduleType === 'monthly') totalDays = durationDays * 30;
+    const end = new Date(start.getTime() + totalDays * 24 * 60 * 60 * 1000);
+    const startStrLocal = getLocalDateString(start);
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      const dStr = getLocalDateString(d);
+      const dayName = d.toLocaleDateString(i18n.language, { weekday: 'short' });
+      
+      const isTaken = intakeSet.has(dStr);
+      const isWithinPeriod = d >= start && d <= end;
+      const isStart = dStr === startStrLocal;
+      
+      tracker.push({
+        dayName,
+        dateStr: dStr,
+        isTaken,
+        isWithinPeriod,
+        isFuture: d > today,
+        isStart,
+      });
+    }
+
+    return (
+      <View style={styles.trackerRow}>
+        {tracker.map((tDay, index) => {
+          let dotStyle = styles.trackerDotEmpty;
+          let textStyle = styles.trackerDotText;
+          
+          if (tDay.isTaken) {
+            dotStyle = styles.trackerDotTaken;
+            textStyle = styles.trackerDotTextActive;
+          } else if (tDay.isFuture) {
+            dotStyle = styles.trackerDotFuture;
+          } else if (tDay.isWithinPeriod) {
+            dotStyle = styles.trackerDotMissed;
+            textStyle = styles.trackerDotTextMissed;
+          }
+
+          return (
+            <View key={index} style={styles.trackerDayContainer}>
+              <Text style={styles.trackerDayLabel}>{tDay.dayName}</Text>
+              <View style={[styles.trackerDot, dotStyle, tDay.isStart && styles.trackerStartDot]}>
+                <Text style={textStyle}>{tDay.isTaken ? '✓' : '×'}</Text>
+              </View>
+              {tDay.isStart && (
+                <Text style={styles.startLabel}>{t('Start')}</Text>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const getWeekdayHeaders = () => {
+    const headers = [];
+    const temp = new Date();
+    const currentDay = temp.getDay();
+    temp.setDate(temp.getDate() - currentDay);
+    for (let i = 0; i < 7; i++) {
+      headers.push(temp.toLocaleDateString(i18n.language, { weekday: 'narrow' }));
+      temp.setDate(temp.getDate() + 1);
+    }
+    return headers;
+  };
+
+  const generate35Days = (intakes, startDateStr, durationDays, scheduleType) => {
+    const calendarDays = [];
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    
+    const intakeSet = new Set(intakes.map(d => getLocalDateString(new Date(d))));
+    const start = new Date(startDateStr);
+    start.setHours(0,0,0,0);
+    
+    let totalDays = durationDays;
+    if (scheduleType === 'weekly') totalDays = durationDays * 7;
+    else if (scheduleType === 'monthly') totalDays = durationDays * 30;
+    const end = new Date(start.getTime() + totalDays * 24 * 60 * 60 * 1000);
+    end.setHours(23,59,59,999);
+    const startStrLocal = getLocalDateString(start);
+
+    const endDay = new Date();
+    const dayOfWeek = endDay.getDay();
+    endDay.setDate(endDay.getDate() + (6 - dayOfWeek));
+    endDay.setHours(0,0,0,0);
+
+    const startDay = new Date(endDay);
+    startDay.setDate(startDay.getDate() - 34);
+
+    for (let i = 0; i < 35; i++) {
+      const d = new Date(startDay);
+      d.setDate(startDay.getDate() + i);
+      const dStr = getLocalDateString(d);
+      
+      const dayNum = d.getDate();
+      const isTaken = intakeSet.has(dStr);
+      const isWithinPeriod = d >= start && d <= end;
+      const isStart = dStr === startStrLocal;
+      
+      calendarDays.push({
+        dayNum,
+        dateStr: dStr,
+        isTaken,
+        isWithinPeriod,
+        isFuture: d > today,
+        isStart,
+      });
+    }
+    return calendarDays;
+  };
 
   // Simulated Alarms (Runs every 10 seconds)
   useEffect(() => {
@@ -96,23 +295,107 @@ export default function PatientDashboard() {
       
       if (lastAlarmTime === currentHHMM) return; // Prevent re-triggering within the same minute
       
-      const triggeredMed = medicines.find(med => med.custom_times && med.custom_times.some((t) => t.startsWith(currentHHMM)));
+      const triggeredMeds = medicines.filter(med => {
+         if (isMedicineCompleted(med)) return false; // Skip completed medicines!
+         return med.custom_times && med.custom_times.some((t) => t.startsWith(currentHHMM));
+      });
       
-      if (triggeredMed) {
+      if (triggeredMeds.length > 0) {
          setLastAlarmTime(currentHHMM);
-         setActiveAlarm(triggeredMed);
-         playSound(triggeredMed);
+         setActiveAlarms(triggeredMeds);
+         playSound(triggeredMeds);
       }
     }, 10000); // Check every 10 seconds
 
     return () => clearInterval(interval);
   }, [medicines, lastAlarmTime]);
 
+  useEffect(() => {
+    requestNotificationPermissions();
+  }, []);
+
+  async function requestNotificationPermissions() {
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        console.log('Notification permission not granted!');
+        return false;
+      }
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('medtrack-alarms', {
+          name: 'MedTrack Alarms',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+          sound: 'default',
+        });
+      }
+      return true;
+    } catch (err) {
+      console.log('Error requesting permissions', err);
+      return false;
+    }
+  }
+
+  const scheduleAllNotifications = async (medList) => {
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      for (const med of medList) {
+        if (isMedicineCompleted(med)) continue;
+        if (!med.custom_times || med.custom_times.length === 0) continue;
+        
+        for (const timeStr of med.custom_times) {
+          const [hourStr, minuteStr] = timeStr.split(':');
+          const hour = parseInt(hourStr, 10);
+          const minute = parseInt(minuteStr, 10);
+          if (isNaN(hour) || isNaN(minute)) continue;
+          
+          let trigger = null;
+          if (med.schedule_type === 'daily') {
+            trigger = { hour, minute, repeats: true };
+          } else if (med.schedule_type === 'weekly') {
+            const startDate = new Date(med.start_date);
+            const weekday = startDate.getDay() + 1; // 1-indexed in Expo (1: Sunday, 2: Monday...)
+            trigger = { weekday, hour, minute, repeats: true };
+          } else {
+            const startDate = new Date(med.start_date);
+            const day = startDate.getDate();
+            trigger = { day, hour, minute, repeats: true };
+          }
+          
+          const title = `${t('Medication Time!')} ⏰`;
+          const body = `${t('Take:')} ${med.medicine_name} (${med.dosage}) - ${med.food_instruction ? t(med.food_instruction) : ''}`;
+          
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title,
+              body,
+              sound: true,
+              priority: Notifications.AndroidNotificationPriority.MAX,
+              channelId: 'medtrack-alarms',
+              data: { medicineId: med.id },
+            },
+            trigger,
+          });
+        }
+      }
+      console.log("All notifications scheduled successfully!");
+    } catch (err) {
+      console.log("Error scheduling notifications", err);
+    }
+  };
+
   const fetchMedicines = async () => {
     setLoadingMeds(true);
     try {
       const res = await axios.get(`${API_URL}/prescriptions/my`);
       setMedicines(res.data);
+      scheduleAllNotifications(res.data);
     } catch (e) {
       console.log('Fetch meds error', e); 
     } finally {
@@ -180,15 +463,38 @@ export default function PatientDashboard() {
     }
   };
 
-  const renderMedicine = ({ item }) => (
-    <TouchableOpacity style={styles.card} onPress={() => setSelectedMedicine(item)}>
-      <Text style={styles.medName}>{item.medicine_name}</Text>
-      <Text style={styles.medDetail}>{t('Dosage: ')}{item.dosage}</Text>
-      <Text style={styles.medDetail}>{t('Schedule: ')}{item.schedule_type ? t(item.schedule_type.toLowerCase()) : ''} ({item.duration_days} {t('Days')})</Text>
-      <Text style={styles.medDetail}>{t('Food: ')}{item.food_instruction ? t(item.food_instruction) : ''}</Text>
-      {item.instructions && <Text style={styles.medDetail}>{t('Note: ')}{item.instructions}</Text>}
-    </TouchableOpacity>
-  );
+  const renderMedicine = ({ item }) => {
+    const completed = isMedicineCompleted(item);
+    return (
+      <TouchableOpacity 
+        style={[styles.card, completed && { opacity: 0.6 }]} 
+        onPress={() => setSelectedMedicine(item)}
+      >
+        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4}}>
+           <Text style={styles.medName}>{item.medicine_name}</Text>
+           {completed && (
+              <View style={styles.completedBadge}>
+                 <Text style={styles.completedBadgeText}>{t('Completed')}</Text>
+              </View>
+           )}
+        </View>
+        <Text style={styles.medDetail}>{t('Dosage: ')}{item.dosage}</Text>
+        <Text style={styles.medDetail}>
+          {t('Schedule: ')}
+          {item.schedule_type ? t(item.schedule_type.toLowerCase()) : ''}
+          {` (for ${item.duration_days} ${
+            item.schedule_type === 'weekly' 
+              ? t('Weeks') 
+              : item.schedule_type === 'monthly' 
+                ? t('Months') 
+                : t('Days')
+          })`}
+        </Text>
+        <Text style={styles.medDetail}>{t('Food: ')}{item.food_instruction ? t(item.food_instruction) : ''}</Text>
+        {item.instructions && <Text style={styles.medDetail}>{t('Note: ')}{item.instructions}</Text>}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -207,22 +513,22 @@ export default function PatientDashboard() {
           <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
             <Text style={styles.logoutText}>{t('Logout')}</Text>
           </TouchableOpacity>
-        </View>
-        <View style={styles.pickerWrapper}>
-           <View style={styles.pickerContainerSmall}>
-             <Picker
-               selectedValue={i18n.language}
-               style={{ height: 40, width: '100%', color: COLORS.text, backgroundColor: '#E6F4F1' }}
-               onValueChange={(itemValue) => i18n.changeLanguage(itemValue)}
-             >
-               <Picker.Item label="EN (English)" value="en" color="#000" />
-               <Picker.Item label="HI (हिंदी)" value="hi" color="#000" />
-               <Picker.Item label="TA (தமிழ்)" value="ta" color="#000" />
-               <Picker.Item label="TE (తెలుగు)" value="te" color="#000" />
-               <Picker.Item label="KN (ಕನ್ನಡ)" value="kn" color="#000" />
-             </Picker>
-           </View>
-        </View>
+         </View>
+         <View style={styles.pickerWrapper}>
+            <View style={styles.pickerContainerSmall}>
+              <Picker
+                selectedValue={i18n.language}
+                style={{ height: 40, width: '100%', color: COLORS.text, backgroundColor: '#E6F4F1' }}
+                onValueChange={(itemValue) => i18n.changeLanguage(itemValue)}
+              >
+                <Picker.Item label="EN (English)" value="en" color="#000" />
+                <Picker.Item label="HI (हिंदी)" value="hi" color="#000" />
+                <Picker.Item label="TA (தமிழ்)" value="ta" color="#000" />
+                <Picker.Item label="TE (తెలుగు)" value="te" color="#000" />
+                <Picker.Item label="KN (ಕನ್ನಡ)" value="kn" color="#000" />
+              </Picker>
+            </View>
+         </View>
       </View>
 
       {/* Tabs */}
@@ -290,18 +596,22 @@ export default function PatientDashboard() {
       </View>
 
       {/* Persistent Alarm Modal */}
-      <Modal visible={!!activeAlarm} transparent={true} animationType="fade">
+      <Modal visible={activeAlarms.length > 0} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={{fontSize: 40, marginBottom: 16}}>⏰</Text>
             <Text style={styles.modalTitle}>{t('Medication Time!')}</Text>
-            {activeAlarm && (
-               <>
-                 <Text style={styles.modalMedName}>{activeAlarm.medicine_name}</Text>
-                 <Text style={styles.modalDetail}>{t('Take:')} {activeAlarm.dosage}</Text>
-                 <Text style={styles.modalDetail}>{t('Instruction:')} {activeAlarm.food_instruction ? t(activeAlarm.food_instruction) : ''}</Text>
-               </>
-            )}
+            
+            <ScrollView style={{ width: '100%', maxHeight: 220 }} contentContainerStyle={{ alignItems: 'center' }}>
+              {activeAlarms.map((alarm, idx) => (
+                 <View key={alarm.id} style={{ marginVertical: 8, alignItems: 'center', borderBottomWidth: idx < activeAlarms.length - 1 ? 1 : 0, borderBottomColor: COLORS.border, width: '100%', paddingBottom: 8 }}>
+                   <Text style={styles.modalMedName}>{alarm.medicine_name}</Text>
+                   <Text style={styles.modalDetail}>{t('Take:')} {alarm.dosage}</Text>
+                   <Text style={styles.modalDetail}>{t('Instruction:')} {alarm.food_instruction ? t(alarm.food_instruction) : ''}</Text>
+                 </View>
+              ))}
+            </ScrollView>
+
             <TouchableOpacity style={styles.dismissButton} onPress={stopSound}>
                <Text style={styles.dismissText}>{t("OK, I've taken it!")}</Text>
             </TouchableOpacity>
@@ -320,7 +630,59 @@ export default function PatientDashboard() {
                </Text>
             )}
             <Text style={styles.modalDetail}>{t('Dosage: ')}{selectedMedicine?.dosage}</Text>
-            <Text style={styles.modalDetail}>{t('Instruction:')} {selectedMedicine?.food_instruction ? t(selectedMedicine.food_instruction) : ''}</Text>
+            <Text style={styles.modalDetail}>
+              {t('Schedule: ')}
+              {selectedMedicine?.schedule_type ? t(selectedMedicine.schedule_type.toLowerCase()) : ''}
+              {` (for ${selectedMedicine?.duration_days} ${
+                selectedMedicine?.schedule_type === 'weekly' 
+                  ? t('Weeks') 
+                  : selectedMedicine?.schedule_type === 'monthly' 
+                    ? t('Months') 
+                    : t('Days')
+              })`}
+            </Text>
+            <Text style={styles.modalDetail}>
+              {t('Instruction:')} {selectedMedicine?.food_instruction ? t(selectedMedicine.food_instruction) : ''}
+            </Text>
+
+            {selectedMedicine && (
+              <View style={{ width: '100%', alignItems: 'center', marginTop: 20 }}>
+                {isMedicineCompleted(selectedMedicine) ? (
+                  <View style={styles.completedMessageContainer}>
+                    <Text style={styles.completedMessageText}>
+                      ✓ {t('Medication period completed')}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.activeMessageContainer}>
+                    <Text style={styles.activeMessageText}>
+                      ● {t('Active Medication')}
+                    </Text>
+                  </View>
+                )}
+
+                <Text style={styles.streakCount}>
+                  🔥 {calculateStreak(selectedMedicine.intakes)} {t('Days Streak')}
+                </Text>
+                
+                <Text style={styles.historyLabel}>{t('MedTrack Streak')}</Text>
+                {renderWeeklyTracker(
+                  selectedMedicine.intakes || [], 
+                  selectedMedicine.start_date,
+                  selectedMedicine.duration_days,
+                  selectedMedicine.schedule_type
+                )}
+
+                {(selectedMedicine.schedule_type === 'weekly' || selectedMedicine.schedule_type === 'monthly' || selectedMedicine.duration_days > 7) && (
+                  <TouchableOpacity 
+                    style={styles.viewCalendarBtn} 
+                    onPress={() => setShowCalendarMed(selectedMedicine)}
+                  >
+                    <Text style={styles.viewCalendarBtnText}>📅 {t('View Full Calendar')}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
 
             <TouchableOpacity 
                style={[styles.primaryButton, { marginTop: 24 }]} 
@@ -330,7 +692,83 @@ export default function PatientDashboard() {
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.dismissButton, { backgroundColor: COLORS.border }]} onPress={() => setSelectedMedicine(null)}>
-               <Text style={styles.dismissText}>Close</Text>
+               <Text style={[styles.dismissText, { color: COLORS.text }]}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Full Streak Calendar Modal */}
+      <Modal visible={!!showCalendarMed} transparent={true} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.calendarModalContent}>
+            <Text style={styles.calendarTitle}>{t('MedTrack Streak History')}</Text>
+            <Text style={styles.calendarSubTitle}>
+              {showCalendarMed?.medicine_name}
+            </Text>
+            
+            <View style={styles.weekdayHeaderRow}>
+              {getWeekdayHeaders().map((day, idx) => (
+                <Text key={idx} style={styles.weekdayLabel}>{day}</Text>
+              ))}
+            </View>
+            
+            <View style={styles.calendarGrid}>
+              {showCalendarMed && generate35Days(
+                showCalendarMed.intakes || [],
+                showCalendarMed.start_date,
+                showCalendarMed.duration_days,
+                showCalendarMed.schedule_type
+              ).map((day, idx) => {
+                let cellStyle = styles.cellUnprescribed;
+                let textStyle = styles.cellUnprescribedText;
+                
+                if (day.isTaken) {
+                  cellStyle = styles.cellTaken;
+                  textStyle = styles.cellTakenText;
+                } else if (day.isFuture) {
+                  cellStyle = styles.cellFuture;
+                  textStyle = styles.cellFutureText;
+                } else if (day.isWithinPeriod) {
+                  cellStyle = styles.cellMissed;
+                  textStyle = styles.cellMissedText;
+                }
+                
+                return (
+                  <View key={idx} style={[styles.calendarCell, cellStyle, day.isStart && styles.calendarStartCell]}>
+                    <Text style={[styles.calendarCellText, textStyle, day.isStart && styles.calendarStartCellText]}>{day.dayNum}</Text>
+                    {day.isStart && (
+                      <Text style={styles.calendarStartStar}>★</Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+            
+            <View style={styles.legendContainer}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, styles.cellTaken]} />
+                <Text style={styles.legendText}>{t('Taken')}</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, styles.cellMissed]} />
+                <Text style={styles.legendText}>{t('Missed')}</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, styles.cellUnprescribed]} />
+                <Text style={styles.legendText}>{t('Inactive')}</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, styles.cellFuture]} />
+                <Text style={styles.legendText}>{t('Future')}</Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity 
+              style={[styles.dismissButton, { backgroundColor: COLORS.border, marginTop: 20 }]} 
+              onPress={() => setShowCalendarMed(null)}
+            >
+              <Text style={[styles.dismissText, { color: COLORS.text }]}>{t('Close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -476,5 +914,264 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center'
   },
-  dismissText: { ...TYPOGRAPHY.button, fontSize: 18 }
+  dismissText: { ...TYPOGRAPHY.button, fontSize: 18 },
+
+  completedBadge: {
+    backgroundColor: COLORS.border,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+  },
+  completedBadgeText: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    fontWeight: '700',
+  },
+  completedMessageContainer: {
+    backgroundColor: '#E6F4EA',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  completedMessageText: {
+    color: '#137333',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  activeMessageContainer: {
+    backgroundColor: '#E8F0FE',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  activeMessageText: {
+    color: '#1A73E8',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  streakCount: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#D93025',
+    marginVertical: 8,
+  },
+  historyLabel: {
+    ...TYPOGRAPHY.caption,
+    fontWeight: '700',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  
+  // Duolingo Tracker Styles
+  trackerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  trackerDayContainer: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  trackerDayLabel: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginBottom: 6,
+    fontWeight: '600',
+  },
+  trackerDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  trackerDotEmpty: {
+    borderColor: COLORS.border,
+    backgroundColor: '#F8FAFC',
+  },
+  trackerDotTaken: {
+    borderColor: '#10B981',
+    backgroundColor: '#D1FAE5',
+  },
+  trackerDotFuture: {
+    borderColor: COLORS.border,
+    backgroundColor: 'transparent',
+    borderStyle: 'dashed',
+  },
+  trackerDotMissed: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEE2E2',
+  },
+  trackerDotText: {
+    fontSize: 14,
+    color: COLORS.border,
+    fontWeight: '700',
+  },
+  trackerDotTextActive: {
+    fontSize: 14,
+    color: '#047857',
+    fontWeight: '700',
+  },
+  trackerDotTextMissed: {
+    fontSize: 14,
+    color: '#B91C1C',
+    fontWeight: '700',
+  },
+  calendarModalContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    alignItems: 'center',
+    ...SHADOWS.large
+  },
+  calendarTitle: {
+    ...TYPOGRAPHY.h2,
+    color: COLORS.primary,
+    marginBottom: 8,
+  },
+  calendarSubTitle: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  weekdayHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingBottom: 4,
+  },
+  weekdayLabel: {
+    width: '12%',
+    textAlign: 'center',
+    fontWeight: 'bold',
+    color: COLORS.textSecondary,
+    fontSize: 12,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    width: '100%',
+    justifyContent: 'flex-start',
+  },
+  calendarCell: {
+    width: '12.2%',
+    aspectRatio: 1,
+    margin: '1%',
+    borderRadius: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  calendarCellText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cellTaken: {
+    backgroundColor: '#D1FAE5',
+    borderColor: '#10B981',
+  },
+  cellTakenText: {
+    color: '#047857',
+  },
+  cellMissed: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#EF4444',
+  },
+  cellMissedText: {
+    color: '#B91C1C',
+  },
+  cellFuture: {
+    backgroundColor: 'transparent',
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+  cellFutureText: {
+    color: COLORS.textSecondary,
+  },
+  cellUnprescribed: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  cellUnprescribedText: {
+    color: '#94A3B8',
+  },
+  legendContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 16,
+    gap: 12,
+    width: '100%',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 12,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  legendText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  viewCalendarBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    borderRadius: 8,
+    marginTop: 12,
+    width: '100%',
+    backgroundColor: '#F0FDFA',
+  },
+  viewCalendarBtnText: {
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  trackerStartDot: {
+    borderColor: '#F59E0B',
+    borderWidth: 3,
+  },
+  startLabel: {
+    fontSize: 9,
+    color: '#D97706',
+    fontWeight: '800',
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  calendarStartCell: {
+    borderColor: '#F59E0B',
+    borderWidth: 2,
+  },
+  calendarStartCellText: {
+    fontWeight: '800',
+  },
+  calendarStartStar: {
+    position: 'absolute',
+    bottom: -1,
+    fontSize: 8,
+    color: '#D97706',
+  },
 });

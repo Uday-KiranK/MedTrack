@@ -25,11 +25,14 @@ const addMedicine = async (data) => {
 const getMedicinesForPatient = async (patientId) => {
   const res = await pool.query(
     `
-    SELECT m.*, p.patient_id, d.name AS doctor_name
+    SELECT m.*, p.patient_id, d.name AS doctor_name, p.created_at AS start_date,
+           COALESCE(json_agg(i.taken_at ORDER BY i.taken_at DESC) FILTER (WHERE i.taken_at IS NOT NULL), '[]') AS intakes
     FROM medicines m
     JOIN prescriptions p ON p.id = m.prescription_id
     JOIN users d ON p.doctor_id = d.id
+    LEFT JOIN medicine_intakes i ON i.medicine_id = m.id
     WHERE p.patient_id = $1
+    GROUP BY m.id, p.patient_id, d.name, p.created_at
     `,
     [patientId]
   );
@@ -50,14 +53,25 @@ const editMedicine = async (id, data) => {
 const getDoctorPatientPrescriptions = async (doctorId, patientId) => {
   const res = await pool.query(
     `
-    SELECT m.*, p.patient_id, p.doctor_id
+    SELECT m.*, p.patient_id, p.doctor_id, p.created_at AS start_date,
+           COALESCE(json_agg(i.taken_at ORDER BY i.taken_at DESC) FILTER (WHERE i.taken_at IS NOT NULL), '[]') AS intakes
     FROM medicines m
     JOIN prescriptions p ON p.id = m.prescription_id
+    LEFT JOIN medicine_intakes i ON i.medicine_id = m.id
     WHERE p.doctor_id = $1 AND p.patient_id = $2
+    GROUP BY m.id, p.patient_id, p.doctor_id, p.created_at
     `,
     [doctorId, patientId]
   );
   return res.rows;
+};
+
+const recordIntake = async (medicineId, patientId) => {
+  const res = await pool.query(
+    "INSERT INTO medicine_intakes (medicine_id, patient_id) VALUES ($1, $2) RETURNING *",
+    [medicineId, patientId]
+  );
+  return res.rows[0];
 };
 
 module.exports = {
@@ -65,5 +79,7 @@ module.exports = {
   addMedicine,
   getMedicinesForPatient,
   editMedicine,
-  getDoctorPatientPrescriptions
+  getDoctorPatientPrescriptions,
+  recordIntake
 };
+
