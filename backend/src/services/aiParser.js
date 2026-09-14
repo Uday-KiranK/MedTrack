@@ -311,16 +311,21 @@ async function generateLabSummary(extractedParams) {
 
   const prompt = `You are a caring, experienced doctor explaining lab results to a patient in simple, friendly language.
 
-Write a warm, encouraging summary (maximum 180-200 words) of the lab report.
-Do NOT include word count notes like "(≈190 words)" or meta titles.
+Write a warm, structured summary of the lab report.
 
-For each important finding:
-- Explain what it means in everyday language
-- Suggest natural, practical ways to improve it (Indian home foods/dishes with specific nutrients, daily habits, walking, yoga, sleep, etc.)
-- Be positive and actionable
+IMPORTANT FORMATTING RULES:
+- Do NOT use any double asterisks (**) or markdown formatting tags. Write in clean plain text only.
+- Do NOT include word counts or meta headers like "(≈190 words)".
 
-Do NOT give any medical diagnosis or prescribe medicines.
-Always end with a strong disclaimer.
+Structure the summary into two clear sections:
+
+PART 1: LAB FINDINGS OVERVIEW
+- Explain key test results in simple, reassuring everyday language.
+
+PART 2: PREFERRED NATURAL ROUTINE
+- Provide 3 to 5 actionable, natural steps tailored specifically to their lab report (such as morning sunlight exposure for low Vitamin D, specific Indian home foods/herbs/spices, hydration, walking/yoga, or sleep habits).
+
+Do NOT give any medical diagnosis or prescribe pharmaceutical drugs.
 
 Lab Results:
 ${paramsText}
@@ -351,10 +356,13 @@ Write the summary now:`;
         { role: "user", content: prompt }
       ],
       temperature: 0.4,
-      max_tokens: 700
+      max_tokens: 800
     }, { headers, timeout: 45000 });
 
-    const summaryText = response.data.choices[0].message.content.trim();
+    let summaryText = response.data.choices[0].message.content.trim();
+
+    // Sanitize any remaining markdown symbols to guarantee clean text on all mobile APKs
+    summaryText = summaryText.replace(/\*\*/g, "").replace(/###?/g, "").trim();
 
     return {
       summary: summaryText,
