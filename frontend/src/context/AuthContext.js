@@ -5,9 +5,9 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 
 // Dynamically connect to the proper IP depending on environment
-export const API_URL = Platform.OS === 'web' 
+export const API_URL = Platform.OS === 'web'
   ? 'http://localhost:5000/api'
-  : 'http://192.168.1.41:5000/api'; // Your laptop's exact Local Wi-Fi IP for Expo Go App
+  : 'https://medtrack-6r6b.onrender.com/api'; // Deployed Render backend URL
 
 export const AuthContext = createContext();
 
@@ -23,7 +23,7 @@ export const AuthProvider = ({ children }) => {
       const storedToken = await AsyncStorage.getItem('userToken');
       if (storedToken) {
         axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-        const response = await axios.get(`${API_URL}/auth/protected`); 
+        const response = await axios.get(`${API_URL}/auth/protected`);
         setUserToken(storedToken);
         setUserInfo(response.data.user);
       }
@@ -54,9 +54,9 @@ export const AuthProvider = ({ children }) => {
       setUserInfo(user);
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Login failed' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Login failed'
       };
     } finally {
       setIsLoading(false);
@@ -71,9 +71,9 @@ export const AuthProvider = ({ children }) => {
       });
       return { success: true, requiresOtp: response.data.requiresOtp, phone: response.data.phone };
     } catch (error) {
-       return { 
-        success: false, 
-        message: error.response?.data?.message || 'Phone login failed' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Phone login failed'
       };
     } finally {
       setIsLoading(false);
@@ -94,9 +94,9 @@ export const AuthProvider = ({ children }) => {
       setUserInfo(user);
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'OTP verification failed' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'OTP verification failed'
       };
     } finally {
       setIsLoading(false);
@@ -115,9 +115,9 @@ export const AuthProvider = ({ children }) => {
       });
       return { success: true, requiresOtp: response.data.requiresOtp, phone: response.data.phone };
     } catch (error) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Registration failed' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Registration failed'
       };
     } finally {
       setIsLoading(false);
@@ -131,7 +131,7 @@ export const AuthProvider = ({ children }) => {
       delete axios.defaults.headers.common['Authorization'];
       setUserToken(null);
       setUserInfo(null);
-    } catch(e) {
+    } catch (e) {
       console.log('Failed to remove token', e);
     } finally {
       setIsLoading(false);

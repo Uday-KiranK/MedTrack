@@ -10,7 +10,15 @@ router.post(
   "/upload",
   authenticate,
   authorizeRole("patient"),
-  upload.single("file"),
+  (req, res, next) => {
+    upload.single("file")(req, res, (err) => {
+      if (err) {
+        console.error("❌ Multer upload error:", err.message);
+        return res.status(400).json({ success: false, error: err.message });
+      }
+      next();
+    });
+  },
   analyzeLabReport
 );
 
