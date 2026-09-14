@@ -496,6 +496,44 @@ export default function PatientDashboard() {
     );
   };
 
+  const renderFormattedText = (text) => {
+    if (!text) return null;
+    const lines = text.split('\n');
+
+    return (
+      <View>
+        {lines.map((line, lineIdx) => {
+          const trimmed = line.trim();
+          if (!trimmed) {
+            return <View key={lineIdx} style={{ height: 6 }} />;
+          }
+
+          const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ');
+          const cleanLine = isBullet ? trimmed.replace(/^[-•*]\s*/, '') : trimmed;
+
+          const parts = cleanLine.split(/(\*\*.*?\*\*)/g);
+
+          return (
+            <Text key={lineIdx} style={[styles.summaryText, { marginBottom: isBullet ? 6 : 4 }]}>
+              {isBullet && <Text style={{ fontWeight: '700', color: COLORS.primary }}>• </Text>}
+              {parts.map((part, partIdx) => {
+                if (part.startsWith('**') && part.endsWith('**')) {
+                  const boldContent = part.slice(2, -2);
+                  return (
+                    <Text key={partIdx} style={{ fontWeight: '700', color: COLORS.text }}>
+                      {boldContent}
+                    </Text>
+                  );
+                }
+                return <Text key={partIdx}>{part}</Text>;
+              })}
+            </Text>
+          );
+        })}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -585,7 +623,7 @@ export default function PatientDashboard() {
                 <Text style={styles.successTitle}>{t('AI Summary Completed')}</Text>
                 
                 <View style={styles.summaryBox}>
-                  <Text style={styles.summaryText}>{labSummary.summary}</Text>
+                  {renderFormattedText(labSummary.summary)}
                 </View>
                 
                 <Text style={styles.disclaimer}>{t('Note:')} {t('disclaimer_text')}</Text>

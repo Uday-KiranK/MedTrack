@@ -312,6 +312,7 @@ async function generateLabSummary(extractedParams) {
   const prompt = `You are a caring, experienced doctor explaining lab results to a patient in simple, friendly language.
 
 Write a warm, encouraging summary (maximum 180-200 words) of the lab report.
+Do NOT include word count notes like "(≈190 words)" or meta titles.
 
 For each important finding:
 - Explain what it means in everyday language
