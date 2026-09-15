@@ -2,11 +2,22 @@ import React, { useContext, useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, ScrollView, Platform, Modal, Image } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTranslation } from 'react-i18next';
-import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import * as Notifications from 'expo-notifications';
+
+// Safe Audio loader for SDK 57 compatibility
+let createAudioPlayer = null;
+let LegacyAudio = null;
+try {
+  const expoAudio = require('expo-audio');
+  createAudioPlayer = expoAudio.createAudioPlayer;
+} catch (e) {}
+
+try {
+  LegacyAudio = require('expo-av').Audio;
+} catch (e) {}
 
 import { AuthContext, API_URL } from '../context/AuthContext';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
@@ -59,18 +70,27 @@ export default function PatientDashboard() {
           }
        }
        
-       if (ringtoneUri) {
-          const { sound: customSound } = await Audio.Sound.createAsync(
-            { uri: ringtoneUri },
-            { shouldPlay: true, isLooping: true }
-          );
-          setSound(customSound);
-       } else {
-          const { sound: defaultSound } = await Audio.Sound.createAsync(
-            { uri: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' },
-            { shouldPlay: true, isLooping: true }
-          );
-          setSound(defaultSound);
+       const soundSource = ringtoneUri || 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
+
+       if (createAudioPlayer) {
+          try {
+            const player = createAudioPlayer(soundSource);
+            player.loop = true;
+            player.play();
+            setSound(player);
+          } catch (audioErr) {
+            console.log("createAudioPlayer error", audioErr);
+          }
+       } else if (LegacyAudio) {
+          try {
+            const { sound: defaultSound } = await LegacyAudio.Sound.createAsync(
+              { uri: soundSource },
+              { shouldPlay: true, isLooping: true }
+            );
+            setSound(defaultSound);
+          } catch (audioErr) {
+            console.log("LegacyAudio error", audioErr);
+          }
        }
 
        // Text To Speech Loop (reads out all matching medicines)
@@ -78,10 +98,12 @@ export default function PatientDashboard() {
        const textToSpeak = `${t('Medication Time!')} ${t('Take:')} ${medNamesStr}`;
        const lang = i18n.language === 'en' ? 'en-IN' : `${i18n.language}-IN`;
        
-       Speech.speak(textToSpeak, { language: lang });
-       speechIntervalRef.current = setInterval(() => {
-          Speech.speak(textToSpeak, { language: lang });
-       }, 6000);
+       if (Speech && Speech.speak) {
+         Speech.speak(textToSpeak, { language: lang });
+         speechIntervalRef.current = setInterval(() => {
+            Speech.speak(textToSpeak, { language: lang });
+         }, 6000);
+       }
 
     } catch(err) {
        console.log("Audio play error", err);
@@ -90,15 +112,27 @@ export default function PatientDashboard() {
 
   const stopSound = async () => {
     if (sound) {
-       await sound.stopAsync();
-       await sound.unloadAsync();
+       try {
+         if (typeof sound.remove === 'function') {
+           sound.remove();
+         } else if (typeof sound.stop === 'function') {
+           sound.stop();
+         } else if (typeof sound.stopAsync === 'function') {
+           await sound.stopAsync();
+           await sound.unloadAsync();
+         }
+       } catch (e) {
+         console.log("Error stopping sound", e);
+       }
        setSound(null);
     }
     if (speechIntervalRef.current) {
        clearInterval(speechIntervalRef.current);
        speechIntervalRef.current = null;
     }
-    Speech.stop();
+    if (Speech && Speech.stop) {
+      Speech.stop();
+    }
 
     for (const alarm of activeAlarms) {
        try {
@@ -113,7 +147,12 @@ export default function PatientDashboard() {
   };
 
   useEffect(() => {
-    return sound ? () => { sound.unloadAsync(); } : undefined;
+    return sound ? () => {
+      try {
+        if (typeof sound.remove === 'function') sound.remove();
+        else if (typeof sound.unloadAsync === 'function') sound.unloadAsync();
+      } catch (e) {}
+    } : undefined;
   }, [sound]);
 
   const getEndPeriodDate = (item) => {
