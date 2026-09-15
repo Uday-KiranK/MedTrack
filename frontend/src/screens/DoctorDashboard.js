@@ -917,8 +917,8 @@ export default function DoctorDashboard() {
             )}
           </View>
         )}
-        </KeyboardAvoidingView>
       </View>
+    </KeyboardAvoidingView>
 
       {/* Add / Edit Inventory Modal */}
       <Modal visible={inventoryModalVisible} transparent={true} animationType="fade" onRequestClose={() => setInventoryModalVisible(false)}>
