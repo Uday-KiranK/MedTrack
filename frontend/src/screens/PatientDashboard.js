@@ -5,7 +5,23 @@ import { useTranslation } from 'react-i18next';
 import * as Speech from 'expo-speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Notifications from 'expo-notifications';
+
+const isExpoGo = Constants?.executionEnvironment === ExecutionEnvironment?.StoreClient;
+
+// Setup background/foreground notification behaviour safely
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch (e) {
+  console.log("Notification handler note:", e.message);
+}
 
 // Safe Audio loader for SDK 57 compatibility
 let createAudioPlayer = null;
@@ -22,15 +38,6 @@ try {
 import { AuthContext, API_URL } from '../context/AuthContext';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
 import LanguageSelectorModal, { LanguageButton } from '../components/LanguageSelectorModal';
-
-// Setup background/foreground notification behaviour
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
 
 export default function PatientDashboard() {
   const { t, i18n } = useTranslation();
@@ -307,7 +314,6 @@ export default function PatientDashboard() {
         finalStatus = status;
       }
       if (finalStatus !== 'granted') {
-        console.log('Notification permission not granted!');
         return false;
       }
       if (Platform.OS === 'android') {
@@ -321,7 +327,7 @@ export default function PatientDashboard() {
       }
       return true;
     } catch (err) {
-      console.log('Error requesting permissions', err);
+      console.log('Notification permission note:', err.message);
       return false;
     }
   }
@@ -368,9 +374,8 @@ export default function PatientDashboard() {
           });
         }
       }
-      console.log("All notifications scheduled successfully!");
     } catch (err) {
-      console.log("Error scheduling notifications", err);
+      console.log("Notification schedule note:", err.message);
     }
   };
 
