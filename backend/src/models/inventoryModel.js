@@ -53,14 +53,21 @@ const updateInventoryItem = async (id, doctorId, data) => {
 
   const fieldMap = {
     medicineName: "medicine_name",
+    medicine_name: "medicine_name",
     brandName: "brand_name",
+    brand_name: "brand_name",
     strength: "strength",
     form: "form",
     stockQuantity: "stock_quantity",
+    stock_quantity: "stock_quantity",
     batchNumber: "batch_number",
+    batch_number: "batch_number",
     expiryDate: "expiry_date",
+    expiry_date: "expiry_date",
     reorderLevel: "reorder_level",
-    sellingPrice: "selling_price"
+    reorder_level: "reorder_level",
+    sellingPrice: "selling_price",
+    selling_price: "selling_price"
   };
 
   for (const [key, col] of Object.entries(fieldMap)) {

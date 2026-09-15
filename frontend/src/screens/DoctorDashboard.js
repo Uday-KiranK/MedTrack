@@ -87,7 +87,7 @@ export default function DoctorDashboard() {
     setLoadingInventory(true);
     try {
       const res = await axios.get(`${API_URL}/inventory`);
-      const data = Array.isArray(res.data) ? res.data : [];
+      const data = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.items) ? res.data.items : []);
       setInventoryItems(data);
     } catch (e) {
       console.log('Error fetching inventory', e);
@@ -145,8 +145,9 @@ export default function DoctorDashboard() {
     if (val.trim().length > 1) {
       try {
         const res = await axios.get(`${API_URL}/inventory/search?q=${encodeURIComponent(val)}`);
-        updated[index].suggestions = res.data;
-        updated[index].showSuggestions = true;
+        const items = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.items) ? res.data.items : []);
+        updated[index].suggestions = items;
+        updated[index].showSuggestions = items.length > 0;
       } catch (e) {
         updated[index].suggestions = [];
       }
@@ -256,14 +257,21 @@ export default function DoctorDashboard() {
 
     try {
       const payload = {
+        medicineName: itemForm.medicine_name,
         medicine_name: itemForm.medicine_name,
+        brandName: itemForm.brand_name,
         brand_name: itemForm.brand_name,
         strength: itemForm.strength,
         form: itemForm.form,
-        stock_quantity: parseInt(itemForm.stock_quantity),
+        stockQuantity: parseInt(itemForm.stock_quantity || '0', 10),
+        stock_quantity: parseInt(itemForm.stock_quantity || '0', 10),
+        batchNumber: itemForm.batch_number,
         batch_number: itemForm.batch_number,
+        expiryDate: itemForm.expiry_date || null,
         expiry_date: itemForm.expiry_date || null,
-        reorder_level: parseInt(itemForm.reorder_level || '10'),
+        reorderLevel: parseInt(itemForm.reorder_level || '10', 10),
+        reorder_level: parseInt(itemForm.reorder_level || '10', 10),
+        sellingPrice: itemForm.selling_price ? parseFloat(itemForm.selling_price) : null,
         selling_price: itemForm.selling_price ? parseFloat(itemForm.selling_price) : null
       };
 

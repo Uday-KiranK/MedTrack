@@ -14,33 +14,32 @@ exports.getInventory = async (req, res) => {
 exports.addInventoryItem = async (req, res) => {
   try {
     const doctorId = req.user.id;
-    const {
-      medicineName,
-      brandName,
-      strength,
-      form,
-      stockQuantity,
-      batchNumber,
-      expiryDate,
-      reorderLevel,
-      sellingPrice
-    } = req.body;
+    const body = req.body || {};
+    const medicineName = body.medicineName || body.medicine_name;
+    const brandName = body.brandName || body.brand_name;
+    const strength = body.strength;
+    const form = body.form;
+    const stockQuantity = body.stockQuantity !== undefined ? body.stockQuantity : body.stock_quantity;
+    const batchNumber = body.batchNumber || body.batch_number;
+    const expiryDate = body.expiryDate || body.expiry_date;
+    const reorderLevel = body.reorderLevel !== undefined ? body.reorderLevel : body.reorder_level;
+    const sellingPrice = body.sellingPrice !== undefined ? body.sellingPrice : body.selling_price;
 
-    if (!medicineName) {
+    if (!medicineName || medicineName.toString().trim().length === 0) {
       return res.status(400).json({ success: false, message: "Medicine name is required" });
     }
 
     const newItem = await inventoryModel.addInventoryItem({
       doctorId,
-      medicineName,
-      brandName,
-      strength,
-      form,
+      medicineName: medicineName.toString().trim(),
+      brandName: brandName ? brandName.toString().trim() : null,
+      strength: strength ? strength.toString().trim() : null,
+      form: form || 'Tablet',
       stockQuantity: parseInt(stockQuantity, 10) || 0,
-      batchNumber,
+      batchNumber: batchNumber ? batchNumber.toString().trim() : null,
       expiryDate: expiryDate || null,
       reorderLevel: parseInt(reorderLevel, 10) || 10,
-      sellingPrice: parseFloat(sellingPrice) || null
+      sellingPrice: sellingPrice !== null && sellingPrice !== undefined && sellingPrice !== '' ? parseFloat(sellingPrice) : null
     });
 
     res.status(201).json({ success: true, item: newItem });
