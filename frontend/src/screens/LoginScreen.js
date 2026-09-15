@@ -1,14 +1,14 @@
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { useTranslation } from 'react-i18next';
-
 import { AuthContext } from '../context/AuthContext';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
+import LanguageSelectorModal, { LanguageButton } from '../components/LanguageSelectorModal';
 
 export default function LoginScreen({ navigation }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [loginMethod, setLoginMethod] = useState('email'); // 'email' | 'phone'
+  const [langModalVisible, setLangModalVisible] = useState(false);
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,12 +48,13 @@ export default function LoginScreen({ navigation }) {
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.content}>
           <Text style={styles.title}>{t('Verify OTP')}</Text>
-          <Text style={styles.subtitle}>Check your terminal for the OTP.</Text>
+          <Text style={styles.subtitle}>Check your phone / SMS for the OTP.</Text>
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Enter 4-digit OTP</Text>
             <TextInput
               style={styles.input}
               placeholder="1234"
+              placeholderTextColor="#64748B"
               value={otp}
               onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, ''))}
               keyboardType="numeric"
@@ -70,6 +71,7 @@ export default function LoginScreen({ navigation }) {
              <Text style={styles.footerLink}>Go Back</Text>
           </TouchableOpacity>
         </View>
+        <LanguageSelectorModal visible={langModalVisible} onClose={() => setLangModalVisible(false)} />
       </KeyboardAvoidingView>
     );
   }
@@ -81,20 +83,7 @@ export default function LoginScreen({ navigation }) {
     >
       <View style={styles.content}>
         <View style={{flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16}}>
-           <Text style={{marginRight: 8, color: COLORS.textSecondary, fontWeight: '600'}}>{t('Change Lang:')}</Text>
-           <View style={styles.pickerContainerSmall}>
-             <Picker
-               selectedValue={i18n.language}
-               style={{ height: 40, width: 130, color: COLORS.text, backgroundColor: '#E6F4F1' }}
-               onValueChange={(itemValue) => i18n.changeLanguage(itemValue)}
-             >
-               <Picker.Item label="EN" value="en" color="#000" />
-               <Picker.Item label="HI (हिंदी)" value="hi" color="#000" />
-               <Picker.Item label="TA (தமிழ்)" value="ta" color="#000" />
-               <Picker.Item label="TE (తెలుగు)" value="te" color="#000" />
-               <Picker.Item label="KN (ಕನ್ನಡ)" value="kn" color="#000" />
-             </Picker>
-           </View>
+           <LanguageButton onPress={() => setLangModalVisible(true)} />
         </View>
 
         <View style={{alignItems: 'center', marginBottom: 24}}>
@@ -125,6 +114,7 @@ export default function LoginScreen({ navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder="Enter your email"
+                placeholderTextColor="#64748B"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -136,6 +126,7 @@ export default function LoginScreen({ navigation }) {
               <TextInput
                 style={styles.input}
                 placeholder="Enter your password"
+                placeholderTextColor="#64748B"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -148,6 +139,7 @@ export default function LoginScreen({ navigation }) {
             <TextInput
               style={styles.input}
               placeholder="Enter your phone"
+              placeholderTextColor="#64748B"
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"

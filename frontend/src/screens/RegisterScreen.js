@@ -1,17 +1,18 @@
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { useTranslation } from 'react-i18next';
 import { AuthContext } from '../context/AuthContext';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
+import LanguageSelectorModal, { LanguageButton } from '../components/LanguageSelectorModal';
 
 export default function RegisterScreen({ navigation }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('patient'); // Default role
+  const [langModalVisible, setLangModalVisible] = useState(false);
   
   const [showOtp, setShowOtp] = useState(false);
   const [otp, setOtp] = useState('');
@@ -41,12 +42,13 @@ export default function RegisterScreen({ navigation }) {
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.content}>
           <Text style={styles.title}>{t('Verify OTP')}</Text>
-          <Text style={styles.subtitle}>{t('Check your terminal (simulated SMS) for the OTP.')}</Text>
+          <Text style={styles.subtitle}>{t('Check your phone / SMS for the OTP.')}</Text>
           <View style={styles.inputContainer}>
             <Text style={styles.label}>{t('Enter 4-digit OTP')}</Text>
             <TextInput
               style={styles.input}
               placeholder="1234"
+              placeholderTextColor="#64748B"
               value={otp}
               onChangeText={setOtp}
               keyboardType="numeric"
@@ -57,6 +59,7 @@ export default function RegisterScreen({ navigation }) {
             {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>{t('Verify & Login')}</Text>}
           </TouchableOpacity>
         </View>
+        <LanguageSelectorModal visible={langModalVisible} onClose={() => setLangModalVisible(false)} />
       </KeyboardAvoidingView>
     );
   }
@@ -68,20 +71,7 @@ export default function RegisterScreen({ navigation }) {
     >
       <View style={styles.content}>
         <View style={{flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16}}>
-           <Text style={{marginRight: 8, color: COLORS.textSecondary, fontWeight: '600'}}>{t('Change Lang:')}</Text>
-           <View style={styles.pickerContainerSmall}>
-             <Picker
-               selectedValue={i18n.language}
-               style={{ height: 40, width: 130, color: COLORS.text, backgroundColor: '#E6F4F1' }}
-               onValueChange={(itemValue) => i18n.changeLanguage(itemValue)}
-             >
-               <Picker.Item label="EN" value="en" color="#000" />
-               <Picker.Item label="HI (हिंदी)" value="hi" color="#000" />
-               <Picker.Item label="TA (தமிழ்)" value="ta" color="#000" />
-               <Picker.Item label="TE (తెలుగు)" value="te" color="#000" />
-               <Picker.Item label="KN (ಕನ್ನಡ)" value="kn" color="#000" />
-             </Picker>
-           </View>
+           <LanguageButton onPress={() => setLangModalVisible(true)} />
         </View>
 
         <View style={{alignItems: 'center', marginBottom: 24}}>
@@ -95,6 +85,7 @@ export default function RegisterScreen({ navigation }) {
           <TextInput
             style={styles.input}
             placeholder={t("Name")}
+            placeholderTextColor="#64748B"
             value={name}
             onChangeText={setName}
           />
@@ -105,6 +96,7 @@ export default function RegisterScreen({ navigation }) {
           <TextInput
             style={styles.input}
             placeholder={t("Email Address")}
+            placeholderTextColor="#64748B"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -117,6 +109,7 @@ export default function RegisterScreen({ navigation }) {
           <TextInput
             style={styles.input}
             placeholder={t("Phone Number")}
+            placeholderTextColor="#64748B"
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
@@ -128,6 +121,7 @@ export default function RegisterScreen({ navigation }) {
           <TextInput
             style={styles.input}
             placeholder={t("Password")}
+            placeholderTextColor="#64748B"
             value={password}
             onChangeText={setPassword}
             secureTextEntry

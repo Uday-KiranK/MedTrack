@@ -1,13 +1,16 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, ScrollView, Platform, Modal, Image } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import { Picker } from '@react-native-picker/picker';
 import { useTranslation } from 'react-i18next';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import * as Notifications from 'expo-notifications';
+
+import { AuthContext, API_URL } from '../context/AuthContext';
+import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
+import LanguageSelectorModal, { LanguageButton } from '../components/LanguageSelectorModal';
 
 // Setup background/foreground notification behaviour
 Notifications.setNotificationHandler({
@@ -18,13 +21,11 @@ Notifications.setNotificationHandler({
   }),
 });
 
-import { AuthContext, API_URL } from '../context/AuthContext';
-import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
-
 export default function PatientDashboard() {
   const { t, i18n } = useTranslation();
   const { logout, userInfo } = useContext(AuthContext);
   const [tab, setTab] = useState('prescriptions'); // 'prescriptions' | 'labs'
+  const [langModalVisible, setLangModalVisible] = useState(false);
   
   // Prescriptions state
   const [medicines, setMedicines] = useState([]);
@@ -85,7 +86,7 @@ export default function PatientDashboard() {
     } catch(err) {
        console.log("Audio play error", err);
     }
-  }
+  };
 
   const stopSound = async () => {
     if (sound) {
@@ -99,7 +100,6 @@ export default function PatientDashboard() {
     }
     Speech.stop();
 
-    // Record intakes for all active alarms
     for (const alarm of activeAlarms) {
        try {
           await axios.post(`${API_URL}/prescriptions/intake`, { medicineId: alarm.id });
@@ -109,31 +109,41 @@ export default function PatientDashboard() {
     }
 
     setActiveAlarms([]);
-    fetchMedicines(); // Refresh so streak counts and visual status update immediately
-  }
+    fetchMedicines(); // Refresh streak counts and visual status
+  };
 
   useEffect(() => {
     return sound ? () => { sound.unloadAsync(); } : undefined;
   }, [sound]);
 
-  const isMedicineCompleted = (item) => {
-    if (!item.start_date) return false;
+  const getEndPeriodDate = (item) => {
+    if (!item.start_date) return new Date();
     const start = new Date(item.start_date);
-    const now = new Date();
-    
-    let totalDays = item.duration_days;
+    let totalDays = item.duration_days || 7;
     if (item.schedule_type === 'weekly') {
       totalDays = item.duration_days * 7;
     } else if (item.schedule_type === 'monthly') {
       totalDays = item.duration_days * 30;
     }
-    
-    const end = new Date(start.getTime() + totalDays * 24 * 60 * 60 * 1000);
+    return new Date(start.getTime() + totalDays * 24 * 60 * 60 * 1000);
+  };
+
+  const isMedicineCompleted = (item) => {
+    if (!item.start_date) return false;
+    const now = new Date();
+    const end = getEndPeriodDate(item);
     return now > end;
   };
 
   const getLocalDateString = (date) => {
-    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+    const d = new Date(date);
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  };
+
+  const formatDisplayDate = (dateObj) => {
+    if (!dateObj) return 'N/A';
+    const d = new Date(dateObj);
+    return d.toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   const calculateStreak = (intakes) => {
@@ -162,71 +172,6 @@ export default function PatientDashboard() {
     return streak;
   };
 
-  const renderWeeklyTracker = (intakes, startDateStr, durationDays, scheduleType) => {
-    const tracker = [];
-    const today = new Date();
-    
-    const intakeSet = new Set(intakes.map(d => getLocalDateString(new Date(d))));
-    const start = new Date(startDateStr);
-    
-    let totalDays = durationDays;
-    if (scheduleType === 'weekly') totalDays = durationDays * 7;
-    else if (scheduleType === 'monthly') totalDays = durationDays * 30;
-    const end = new Date(start.getTime() + totalDays * 24 * 60 * 60 * 1000);
-    const startStrLocal = getLocalDateString(start);
-
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(today.getDate() - i);
-      const dStr = getLocalDateString(d);
-      const dayName = d.toLocaleDateString(i18n.language, { weekday: 'short' });
-      
-      const isTaken = intakeSet.has(dStr);
-      const isWithinPeriod = d >= start && d <= end;
-      const isStart = dStr === startStrLocal;
-      
-      tracker.push({
-        dayName,
-        dateStr: dStr,
-        isTaken,
-        isWithinPeriod,
-        isFuture: d > today,
-        isStart,
-      });
-    }
-
-    return (
-      <View style={styles.trackerRow}>
-        {tracker.map((tDay, index) => {
-          let dotStyle = styles.trackerDotEmpty;
-          let textStyle = styles.trackerDotText;
-          
-          if (tDay.isTaken) {
-            dotStyle = styles.trackerDotTaken;
-            textStyle = styles.trackerDotTextActive;
-          } else if (tDay.isFuture) {
-            dotStyle = styles.trackerDotFuture;
-          } else if (tDay.isWithinPeriod) {
-            dotStyle = styles.trackerDotMissed;
-            textStyle = styles.trackerDotTextMissed;
-          }
-
-          return (
-            <View key={index} style={styles.trackerDayContainer}>
-              <Text style={styles.trackerDayLabel}>{tDay.dayName}</Text>
-              <View style={[styles.trackerDot, dotStyle, tDay.isStart && styles.trackerStartDot]}>
-                <Text style={textStyle}>{tDay.isTaken ? '✓' : '×'}</Text>
-              </View>
-              {tDay.isStart && (
-                <Text style={styles.startLabel}>{t('Start')}</Text>
-              )}
-            </View>
-          );
-        })}
-      </View>
-    );
-  };
-
   const getWeekdayHeaders = () => {
     const headers = [];
     const temp = new Date();
@@ -248,7 +193,7 @@ export default function PatientDashboard() {
     const start = new Date(startDateStr);
     start.setHours(0,0,0,0);
     
-    let totalDays = durationDays;
+    let totalDays = durationDays || 7;
     if (scheduleType === 'weekly') totalDays = durationDays * 7;
     else if (scheduleType === 'monthly') totalDays = durationDays * 30;
     const end = new Date(start.getTime() + totalDays * 24 * 60 * 60 * 1000);
@@ -285,7 +230,7 @@ export default function PatientDashboard() {
     return calendarDays;
   };
 
-  // Simulated Alarms (Runs every 10 seconds)
+  // Foreground Alarms Interval
   useEffect(() => {
     if (medicines.length === 0) return;
     
@@ -293,10 +238,10 @@ export default function PatientDashboard() {
       const now = new Date();
       const currentHHMM = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
       
-      if (lastAlarmTime === currentHHMM) return; // Prevent re-triggering within the same minute
+      if (lastAlarmTime === currentHHMM) return;
       
       const triggeredMeds = medicines.filter(med => {
-         if (isMedicineCompleted(med)) return false; // Skip completed medicines!
+         if (isMedicineCompleted(med)) return false;
          return med.custom_times && med.custom_times.some((t) => t.startsWith(currentHHMM));
       });
       
@@ -305,7 +250,7 @@ export default function PatientDashboard() {
          setActiveAlarms(triggeredMeds);
          playSound(triggeredMeds);
       }
-    }, 10000); // Check every 10 seconds
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [medicines, lastAlarmTime]);
@@ -360,7 +305,7 @@ export default function PatientDashboard() {
             trigger = { hour, minute, repeats: true };
           } else if (med.schedule_type === 'weekly') {
             const startDate = new Date(med.start_date);
-            const weekday = startDate.getDay() + 1; // 1-indexed in Expo (1: Sunday, 2: Monday...)
+            const weekday = startDate.getDay() + 1;
             trigger = { weekday, hour, minute, repeats: true };
           } else {
             const startDate = new Date(med.start_date);
@@ -418,10 +363,8 @@ export default function PatientDashboard() {
 
       const formData = new FormData();
       if (Platform.OS === 'web') {
-        // Web uses actual DOM File object
         formData.append('file', fileToUpload.file);
       } else {
-        // React Native requires a polyfilled object
         formData.append('file', {
           uri: fileToUpload.uri,
           type: fileToUpload.mimeType || 'application/pdf',
@@ -429,7 +372,6 @@ export default function PatientDashboard() {
         });
       }
       
-      // Send the current language context so backend can leverage Sarvam AI 
       formData.append('lang', i18n.language);
 
       const response = await axios.post(`${API_URL}/labs/upload`, formData, {
@@ -465,34 +407,69 @@ export default function PatientDashboard() {
 
   const renderMedicine = ({ item }) => {
     const completed = isMedicineCompleted(item);
+    const startDateFormatted = formatDisplayDate(item.start_date);
+    const endDateFormatted = formatDisplayDate(getEndPeriodDate(item));
+    const isClinicSource = item.availability_source === 'clinic_pharmacy';
+
     return (
-      <TouchableOpacity 
-        style={[styles.card, completed && { opacity: 0.6 }]} 
-        onPress={() => setSelectedMedicine(item)}
-      >
-        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4}}>
-           <Text style={styles.medName}>{item.medicine_name}</Text>
-           {completed && (
+      <View style={[styles.card, completed && styles.cardCompleted]}>
+        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
+           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+             <Text style={styles.medName}>{item.medicine_name}</Text>
+             {isClinicSource ? (
+               <View style={styles.clinicBadge}>
+                 <Text style={styles.clinicBadgeText}>Available at Clinic Pharmacy</Text>
+               </View>
+             ) : (
+               <View style={styles.outsideBadge}>
+                 <Text style={styles.outsideBadgeText}>Buy Outside</Text>
+               </View>
+             )}
+           </View>
+
+           {completed ? (
               <View style={styles.completedBadge}>
                  <Text style={styles.completedBadgeText}>{t('Completed')}</Text>
               </View>
+           ) : (
+              <View style={styles.activeBadge}>
+                 <Text style={styles.activeBadgeText}>{t('Active')}</Text>
+              </View>
            )}
         </View>
-        <Text style={styles.medDetail}>{t('Dosage: ')}{item.dosage}</Text>
+
+        <Text style={styles.medDetail}>{t('Dosage: ')}<Text style={{ fontWeight: '700', color: COLORS.text }}>{item.dosage}</Text></Text>
         <Text style={styles.medDetail}>
           {t('Schedule: ')}
-          {item.schedule_type ? t(item.schedule_type.toLowerCase()) : ''}
-          {` (for ${item.duration_days} ${
-            item.schedule_type === 'weekly' 
-              ? t('Weeks') 
-              : item.schedule_type === 'monthly' 
-                ? t('Months') 
-                : t('Days')
-          })`}
+          <Text style={{ fontWeight: '700', color: COLORS.text }}>
+            {item.schedule_type ? t(item.schedule_type.toLowerCase()) : ''}
+            {` (for ${item.duration_days} ${
+              item.schedule_type === 'weekly' 
+                ? t('Weeks') 
+                : item.schedule_type === 'monthly' 
+                  ? t('Months') 
+                  : t('Days')
+            })`}
+          </Text>
         </Text>
-        <Text style={styles.medDetail}>{t('Food: ')}{item.food_instruction ? t(item.food_instruction) : ''}</Text>
-        {item.instructions && <Text style={styles.medDetail}>{t('Note: ')}{item.instructions}</Text>}
-      </TouchableOpacity>
+        <Text style={styles.medDetail}>{t('Food: ')}<Text style={{ fontWeight: '700', color: COLORS.text }}>{item.food_instruction ? t(item.food_instruction) : ''}</Text></Text>
+        
+        {/* Date Ranges Refinement #7 */}
+        <View style={styles.dateRangeBox}>
+           <Text style={styles.dateRangeText}>📅 Started On: <Text style={{ fontWeight: '700', color: COLORS.text }}>{startDateFormatted}</Text></Text>
+           <Text style={styles.dateRangeText}>🏁 Ending On: <Text style={{ fontWeight: '700', color: COLORS.text }}>{endDateFormatted}</Text></Text>
+        </View>
+
+        {item.instructions && <Text style={[styles.medDetail, { marginTop: 4 }]}>{t('Note: ')}{item.instructions}</Text>}
+
+        {/* Medicine History Button Refinement #5 */}
+        <TouchableOpacity 
+          style={styles.showHistoryBtn}
+          onPress={() => setShowCalendarMed(item)}
+        >
+          <Text style={styles.showHistoryBtnText}>📅 Show Medicine History / Streak</Text>
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -511,22 +488,10 @@ export default function PatientDashboard() {
           const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ');
           const cleanLine = isBullet ? trimmed.replace(/^[-•*]\s*/, '') : trimmed;
 
-          const parts = cleanLine.split(/(\*\*.*?\*\*)/g);
-
           return (
             <Text key={lineIdx} style={[styles.summaryText, { marginBottom: isBullet ? 6 : 4 }]}>
               {isBullet && <Text style={{ fontWeight: '700', color: COLORS.primary }}>• </Text>}
-              {parts.map((part, partIdx) => {
-                if (part.startsWith('**') && part.endsWith('**')) {
-                  const boldContent = part.slice(2, -2);
-                  return (
-                    <Text key={partIdx} style={{ fontWeight: '700', color: COLORS.text }}>
-                      {boldContent}
-                    </Text>
-                  );
-                }
-                return <Text key={partIdx}>{part}</Text>;
-              })}
+              {cleanLine}
             </Text>
           );
         })}
@@ -548,24 +513,12 @@ export default function PatientDashboard() {
                <Text style={styles.subtitle}>{t('Patient ID:')} {userInfo?.id}</Text>
              </View>
           </View>
-          <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-            <Text style={styles.logoutText}>{t('Logout')}</Text>
-          </TouchableOpacity>
-         </View>
-         <View style={styles.pickerWrapper}>
-            <View style={styles.pickerContainerSmall}>
-              <Picker
-                selectedValue={i18n.language}
-                style={{ height: 40, width: '100%', color: COLORS.text, backgroundColor: '#E6F4F1' }}
-                onValueChange={(itemValue) => i18n.changeLanguage(itemValue)}
-              >
-                <Picker.Item label="EN (English)" value="en" color="#000" />
-                <Picker.Item label="HI (हिंदी)" value="hi" color="#000" />
-                <Picker.Item label="TA (தமிழ்)" value="ta" color="#000" />
-                <Picker.Item label="TE (తెలుగు)" value="te" color="#000" />
-                <Picker.Item label="KN (ಕನ್ನಡ)" value="kn" color="#000" />
-              </Picker>
-            </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <LanguageButton onPress={() => setLangModalVisible(true)} />
+            <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+              <Text style={styles.logoutText}>{t('Logout')}</Text>
+            </TouchableOpacity>
+          </View>
          </View>
       </View>
 
@@ -657,92 +610,23 @@ export default function PatientDashboard() {
         </View>
       </Modal>
 
-      {/* Prescription Details Drill-Down Modal */}
-      <Modal visible={!!selectedMedicine} transparent={true} animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{selectedMedicine?.medicine_name}</Text>
-            {selectedMedicine?.doctor_name && (
-               <Text style={[styles.modalDetail, { color: COLORS.primary, marginBottom: 16 }]}>
-                 {t('Prescribed by Dr.')} {selectedMedicine.doctor_name}
-               </Text>
-            )}
-            <Text style={styles.modalDetail}>{t('Dosage: ')}{selectedMedicine?.dosage}</Text>
-            <Text style={styles.modalDetail}>
-              {t('Schedule: ')}
-              {selectedMedicine?.schedule_type ? t(selectedMedicine.schedule_type.toLowerCase()) : ''}
-              {` (for ${selectedMedicine?.duration_days} ${
-                selectedMedicine?.schedule_type === 'weekly' 
-                  ? t('Weeks') 
-                  : selectedMedicine?.schedule_type === 'monthly' 
-                    ? t('Months') 
-                    : t('Days')
-              })`}
-            </Text>
-            <Text style={styles.modalDetail}>
-              {t('Instruction:')} {selectedMedicine?.food_instruction ? t(selectedMedicine.food_instruction) : ''}
-            </Text>
-
-            {selectedMedicine && (
-              <View style={{ width: '100%', alignItems: 'center', marginTop: 20 }}>
-                {isMedicineCompleted(selectedMedicine) ? (
-                  <View style={styles.completedMessageContainer}>
-                    <Text style={styles.completedMessageText}>
-                      ✓ {t('Medication period completed')}
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.activeMessageContainer}>
-                    <Text style={styles.activeMessageText}>
-                      ● {t('Active Medication')}
-                    </Text>
-                  </View>
-                )}
-
-                <Text style={styles.streakCount}>
-                  🔥 {calculateStreak(selectedMedicine.intakes)} {t('Days Streak')}
-                </Text>
-                
-                <Text style={styles.historyLabel}>{t('MedTrack Streak')}</Text>
-                {renderWeeklyTracker(
-                  selectedMedicine.intakes || [], 
-                  selectedMedicine.start_date,
-                  selectedMedicine.duration_days,
-                  selectedMedicine.schedule_type
-                )}
-
-                {(selectedMedicine.schedule_type === 'weekly' || selectedMedicine.schedule_type === 'monthly' || selectedMedicine.duration_days > 7) && (
-                  <TouchableOpacity 
-                    style={styles.viewCalendarBtn} 
-                    onPress={() => setShowCalendarMed(selectedMedicine)}
-                  >
-                    <Text style={styles.viewCalendarBtnText}>📅 {t('View Full Calendar')}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
-            <TouchableOpacity 
-               style={[styles.primaryButton, { marginTop: 24 }]} 
-               onPress={() => handlePickRingtone(selectedMedicine?.id)}
-            >
-               <Text style={styles.primaryButtonText}>🎵 Set Custom Ringtone</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.dismissButton, { backgroundColor: COLORS.border }]} onPress={() => setSelectedMedicine(null)}>
-               <Text style={[styles.dismissText, { color: COLORS.text }]}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Full Streak Calendar Modal */}
+      {/* Full Streak Calendar Modal with Cross (Close) Button */}
       <Modal visible={!!showCalendarMed} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.calendarModalContent}>
-            <Text style={styles.calendarTitle}>{t('MedTrack Streak History')}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 8 }}>
+              <Text style={styles.calendarTitle}>{t('MedTrack Streak History')}</Text>
+              <TouchableOpacity onPress={() => setShowCalendarMed(null)} style={styles.closeBtnIcon}>
+                <Text style={styles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
             <Text style={styles.calendarSubTitle}>
               {showCalendarMed?.medicine_name}
+            </Text>
+
+            <Text style={styles.streakCount}>
+              🔥 {calculateStreak(showCalendarMed?.intakes || [])} {t('Days Streak')}
             </Text>
             
             <View style={styles.weekdayHeaderRow}>
@@ -801,9 +685,16 @@ export default function PatientDashboard() {
                 <Text style={styles.legendText}>{t('Future')}</Text>
               </View>
             </View>
+
+            <TouchableOpacity 
+               style={[styles.primaryButton, { marginTop: 16 }]} 
+               onPress={() => handlePickRingtone(showCalendarMed?.id)}
+            >
+               <Text style={styles.primaryButtonText}>🎵 Set Custom Ringtone</Text>
+            </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.dismissButton, { backgroundColor: COLORS.border, marginTop: 20 }]} 
+              style={[styles.dismissButton, { backgroundColor: COLORS.border, marginTop: 12 }]} 
               onPress={() => setShowCalendarMed(null)}
             >
               <Text style={[styles.dismissText, { color: COLORS.text }]}>{t('Close')}</Text>
@@ -812,6 +703,8 @@ export default function PatientDashboard() {
         </View>
       </Modal>
 
+      {/* Language Selector Modal */}
+      <LanguageSelectorModal visible={langModalVisible} onClose={() => setLangModalVisible(false)} />
     </View>
   );
 }
@@ -820,7 +713,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: {
     padding: 24,
-    paddingTop: 60,
+    paddingTop: 50,
     backgroundColor: COLORS.surface,
     flexDirection: 'column',
     ...SHADOWS.small,
@@ -829,7 +722,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
     flexWrap: 'wrap',
     gap: 12
   },
@@ -841,11 +733,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   logoImage: {
-    width: 80,
-    height: 80,
+    width: 60,
+    height: 60,
     resizeMode: 'contain'
   },
-  greeting: { ...TYPOGRAPHY.h2, color: COLORS.primary },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
   logoutBtn: {
     paddingVertical: 6,
@@ -855,20 +746,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   logoutText: { color: COLORS.error, fontWeight: '600' },
-  pickerWrapper: {
-    width: '100%'
-  },
-  pickerContainerSmall: {
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: 'hidden',
-  },
   tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    marginTop: 16,
+    marginTop: 12,
     gap: 8,
   },
   tab: {
@@ -876,12 +757,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
   },
-  activeTab: {
-    backgroundColor: COLORS.primaryLight,
-  },
+  activeTab: { backgroundColor: '#E6F4F1' },
   tabText: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, fontWeight: '600' },
-  activeTabText: { color: COLORS.primary },
+  activeTabText: { color: '#1A9988' },
   content: { flex: 1, padding: 16 },
+
   card: {
     backgroundColor: COLORS.surface,
     padding: 16,
@@ -891,180 +771,152 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     ...SHADOWS.small,
   },
-  medName: { ...TYPOGRAPHY.h3, marginBottom: 8 },
-  medDetail: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginBottom: 4 },
-  emptyText: { ...TYPOGRAPHY.body, textAlign: 'center', marginTop: 40, color: COLORS.textSecondary },
-  uploadSection: {
-    backgroundColor: COLORS.surface,
-    padding: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.primaryLight,
-    alignItems: 'center',
-    ...SHADOWS.small,
+  cardCompleted: {
+    opacity: 0.75,
+    backgroundColor: '#F8FAFC',
   },
-  sectionTitle: { ...TYPOGRAPHY.h3, marginBottom: 8 },
-  sectionSubtitle: { ...TYPOGRAPHY.body, textAlign: 'center', color: COLORS.textSecondary, marginBottom: 24 },
-  primaryButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    width: '100%',
-    alignItems: 'center',
-  },
-  primaryButtonText: { ...TYPOGRAPHY.button },
-  summaryContainer: { marginTop: 24 },
-  successTitle: { ...TYPOGRAPHY.h3, color: COLORS.success, marginBottom: 12 },
-  summaryBox: {
-    backgroundColor: COLORS.primaryLight,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  summaryText: { ...TYPOGRAPHY.body, lineHeight: 24 },
-  disclaimer: { ...TYPOGRAPHY.caption, color: COLORS.error, fontStyle: 'italic', textAlign: 'center' },
-  
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24
-  },
-  modalContent: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 32,
-    width: '100%',
-    alignItems: 'center',
-    ...SHADOWS.large
-  },
-  modalTitle: { ...TYPOGRAPHY.h2, color: COLORS.error, marginBottom: 16 },
-  modalMedName: { ...TYPOGRAPHY.h1, color: COLORS.primary, marginBottom: 8 },
-  modalDetail: { ...TYPOGRAPHY.h3, color: COLORS.text, marginBottom: 4 },
-  dismissButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    marginTop: 24,
-    width: '100%',
-    alignItems: 'center'
-  },
-  dismissText: { ...TYPOGRAPHY.button, fontSize: 18 },
+  medName: { ...TYPOGRAPHY.h3, color: COLORS.text, fontWeight: 'bold' },
+  medDetail: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginTop: 2 },
+  emptyText: { textAlign: 'center', marginTop: 40, color: COLORS.textSecondary },
 
+  activeBadge: {
+    backgroundColor: '#E8F0FE',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  activeBadgeText: {
+    fontSize: 11,
+    color: '#1A73E8',
+    fontWeight: '700',
+  },
   completedBadge: {
-    backgroundColor: COLORS.border,
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  completedBadgeText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '700',
+  },
+  clinicBadge: {
+    backgroundColor: '#D1FAE5',
     paddingVertical: 2,
     paddingHorizontal: 6,
     borderRadius: 4,
   },
-  completedBadgeText: {
+  clinicBadgeText: {
     fontSize: 10,
-    color: COLORS.textSecondary,
-    fontWeight: '700',
-  },
-  completedMessageContainer: {
-    backgroundColor: '#E6F4EA',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  completedMessageText: {
-    color: '#137333',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  activeMessageContainer: {
-    backgroundColor: '#E8F0FE',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  activeMessageText: {
-    color: '#1A73E8',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  streakCount: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#D93025',
-    marginVertical: 8,
-  },
-  historyLabel: {
-    ...TYPOGRAPHY.caption,
-    fontWeight: '700',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  
-  // Duolingo Tracker Styles
-  trackerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginTop: 8,
-    paddingHorizontal: 4,
-  },
-  trackerDayContainer: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  trackerDayLabel: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    marginBottom: 6,
-    fontWeight: '600',
-  },
-  trackerDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-  },
-  trackerDotEmpty: {
-    borderColor: COLORS.border,
-    backgroundColor: '#F8FAFC',
-  },
-  trackerDotTaken: {
-    borderColor: '#10B981',
-    backgroundColor: '#D1FAE5',
-  },
-  trackerDotFuture: {
-    borderColor: COLORS.border,
-    backgroundColor: 'transparent',
-    borderStyle: 'dashed',
-  },
-  trackerDotMissed: {
-    borderColor: '#EF4444',
-    backgroundColor: '#FEE2E2',
-  },
-  trackerDotText: {
-    fontSize: 14,
-    color: COLORS.border,
-    fontWeight: '700',
-  },
-  trackerDotTextActive: {
-    fontSize: 14,
     color: '#047857',
     fontWeight: '700',
   },
-  trackerDotTextMissed: {
-    fontSize: 14,
-    color: '#B91C1C',
+  outsideBadge: {
+    backgroundColor: '#FFEDD5',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+  },
+  outsideBadgeText: {
+    fontSize: 10,
+    color: '#C2410C',
     fontWeight: '700',
   },
-  calendarModalContent: {
+
+  dateRangeBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    padding: 8,
+    borderRadius: 8,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  dateRangeText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+
+  showHistoryBtn: {
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  showHistoryBtnText: {
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
+  uploadSection: {
+    backgroundColor: COLORS.surface,
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.small,
+  },
+  sectionTitle: { ...TYPOGRAPHY.h3, color: COLORS.primary, marginBottom: 4 },
+  sectionSubtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginBottom: 16 },
+  primaryButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    width: '100%',
+  },
+  primaryButtonText: { ...TYPOGRAPHY.button },
+
+  summaryContainer: {
+    backgroundColor: COLORS.surface,
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.small,
+  },
+  successTitle: { ...TYPOGRAPHY.h3, color: '#10B981', marginBottom: 12 },
+  summaryBox: {
+    backgroundColor: COLORS.inputBg,
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  summaryText: { ...TYPOGRAPHY.body, color: COLORS.text },
+  disclaimer: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, fontStyle: 'italic' },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
     backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 24,
-    width: '90%',
+    width: '100%',
+    alignItems: 'center',
+    ...SHADOWS.large,
+  },
+  modalTitle: { ...TYPOGRAPHY.h2, color: COLORS.primary, marginBottom: 8 },
+  modalMedName: { ...TYPOGRAPHY.h3, color: COLORS.text, fontWeight: 'bold' },
+  modalDetail: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginBottom: 4 },
+
+  calendarModalContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
     maxWidth: 400,
     alignItems: 'center',
     ...SHADOWS.large
@@ -1072,13 +924,31 @@ const styles = StyleSheet.create({
   calendarTitle: {
     ...TYPOGRAPHY.h2,
     color: COLORS.primary,
-    marginBottom: 8,
   },
   calendarSubTitle: {
     ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
-    marginBottom: 16,
+    marginBottom: 8,
     textAlign: 'center',
+  },
+  closeBtnIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeBtnText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontWeight: 'bold',
+  },
+  streakCount: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#D93025',
+    marginBottom: 12,
   },
   weekdayHeaderRow: {
     flexDirection: 'row',
@@ -1170,35 +1040,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textSecondary,
   },
-  viewCalendarBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    borderRadius: 8,
-    marginTop: 12,
+  dismissButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    marginTop: 16,
     width: '100%',
-    backgroundColor: '#F0FDFA',
+    alignItems: 'center'
   },
-  viewCalendarBtnText: {
-    color: COLORS.primary,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  trackerStartDot: {
-    borderColor: '#F59E0B',
-    borderWidth: 3,
-  },
-  startLabel: {
-    fontSize: 9,
-    color: '#D97706',
-    fontWeight: '800',
-    marginTop: 2,
-    textTransform: 'uppercase',
-  },
+  dismissText: { ...TYPOGRAPHY.button },
   calendarStartCell: {
     borderColor: '#F59E0B',
     borderWidth: 2,

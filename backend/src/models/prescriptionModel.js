@@ -8,18 +8,67 @@ const createPrescription = async (doctorId, patientId) => {
   return res.rows[0];
 };
 
+const { deductStock } = require("./inventoryModel");
+
 const addMedicine = async (data) => {
+  const {
+    prescription_id,
+    medicine_name,
+    dosage,
+    schedule_type,
+    frequency_per_day,
+    duration_days,
+    time_slots,
+    custom_times,
+    interval_days,
+    selected_days,
+    food_instruction,
+    instructions,
+    availability_source = 'buy_outside'
+  } = data;
+
   const res = await pool.query(
     `INSERT INTO medicines (
       prescription_id, medicine_name, dosage, schedule_type,
       frequency_per_day, duration_days, time_slots,
       custom_times, interval_days, selected_days,
-      food_instruction, instructions
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      food_instruction, instructions, availability_source
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
     RETURNING *`,
-    Object.values(data)
+    [
+      prescription_id,
+      medicine_name,
+      dosage,
+      schedule_type,
+      frequency_per_day,
+      duration_days,
+      time_slots,
+      custom_times,
+      interval_days,
+      selected_days,
+      food_instruction,
+      instructions,
+      availability_source
+    ]
   );
-  return res.rows[0];
+
+  const insertedMed = res.rows[0];
+
+  // If item is from clinic pharmacy, auto-deduct stock
+  if (availability_source === 'clinic_pharmacy') {
+    try {
+      // Find doctor_id for this prescription
+      const pRes = await pool.query(`SELECT doctor_id FROM prescriptions WHERE id = $1`, [prescription_id]);
+      if (pRes.rows.length > 0) {
+        const doctorId = pRes.rows[0].doctor_id;
+        await deductStock(doctorId, medicine_name, 1);
+      }
+    } catch (e) {
+      console.error("Auto deduct stock error:", e.message);
+    }
+  }
+
+  return insertedMed;
 };
 
 const getMedicinesForPatient = async (patientId) => {
