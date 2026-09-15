@@ -921,83 +921,81 @@ export default function DoctorDashboard() {
       {/* Add / Edit Inventory Modal */}
       <Modal visible={inventoryModalVisible} transparent={true} animationType="fade" onRequestClose={() => setInventoryModalVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setInventoryModalVisible(false)}>
-          <ScrollView 
-            contentContainerStyle={styles.modalScrollContent} 
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
+          <View style={styles.modalCenterWrapper}>
             <TouchableOpacity activeOpacity={1} style={styles.inventoryModalCard} onPress={() => {}}>
               <View style={styles.modalHeaderRow}>
-                <View style={{ flexShrink: 1 }}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
                   <Text style={styles.modalTitle}>{editingInventoryItem ? 'Edit Pharmacy Item' : 'Add Stock Item'}</Text>
-                  <Text style={styles.modalSubTitle}>Clinic Pharmacy Inventory Management</Text>
+                  <Text style={styles.modalSubTitle}>Clinic Pharmacy Inventory</Text>
                 </View>
                 <TouchableOpacity onPress={() => setInventoryModalVisible(false)} style={styles.closeBtnIcon}>
                   <Text style={styles.closeBtnText}>✕</Text>
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.label}>Medicine Name *</Text>
-              <TextInput style={styles.input} placeholder="e.g. Amoxicillin" placeholderTextColor="#64748B" value={itemForm.medicine_name} onChangeText={(val) => setItemForm({ ...itemForm, medicine_name: val })} />
+              <ScrollView style={{ width: '100%' }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <Text style={styles.label}>Medicine Name *</Text>
+                <TextInput style={styles.input} placeholder="e.g. Amoxicillin" placeholderTextColor="#64748B" value={itemForm.medicine_name} onChangeText={(val) => setItemForm({ ...itemForm, medicine_name: val })} />
 
-              <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 6 }}>
-                  <Text style={styles.label}>Brand Name</Text>
-                  <TextInput style={styles.input} placeholder="e.g. Cipla / Sun" placeholderTextColor="#64748B" value={itemForm.brand_name} onChangeText={(val) => setItemForm({ ...itemForm, brand_name: val })} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 6 }}>
-                  <Text style={styles.label}>Strength</Text>
-                  <TextInput style={styles.input} placeholder="e.g. 500mg" placeholderTextColor="#64748B" value={itemForm.strength} onChangeText={(val) => setItemForm({ ...itemForm, strength: val })} />
-                </View>
-              </View>
-
-              <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 6 }}>
-                  <Text style={styles.label}>Form</Text>
-                  <View style={styles.pickerContainer}>
-                    <Picker selectedValue={itemForm.form} onValueChange={(val) => setItemForm({ ...itemForm, form: val })}>
-                      <Picker.Item label="Tablet" value="Tablet" />
-                      <Picker.Item label="Capsule" value="Capsule" />
-                      <Picker.Item label="Syrup" value="Syrup" />
-                      <Picker.Item label="Injection" value="Injection" />
-                      <Picker.Item label="Ointment" value="Ointment" />
-                      <Picker.Item label="Drops" value="Drops" />
-                    </Picker>
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Brand Name</Text>
+                    <TextInput style={styles.input} placeholder="e.g. Cipla / Sun" placeholderTextColor="#64748B" value={itemForm.brand_name} onChangeText={(val) => setItemForm({ ...itemForm, brand_name: val })} />
+                  </View>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Strength</Text>
+                    <TextInput style={styles.input} placeholder="e.g. 500mg" placeholderTextColor="#64748B" value={itemForm.strength} onChangeText={(val) => setItemForm({ ...itemForm, strength: val })} />
                   </View>
                 </View>
-                <View style={{ flex: 1, marginLeft: 6 }}>
-                  <Text style={styles.label}>Stock Qty *</Text>
-                  <TextInput style={styles.input} placeholder="e.g. 100" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.stock_quantity} onChangeText={(val) => setItemForm({ ...itemForm, stock_quantity: val })} />
-                </View>
-              </View>
 
-              <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 6 }}>
-                  <Text style={styles.label}>Batch Number</Text>
-                  <TextInput style={styles.input} placeholder="e.g. B-9982" placeholderTextColor="#64748B" value={itemForm.batch_number} onChangeText={(val) => setItemForm({ ...itemForm, batch_number: val })} />
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Form</Text>
+                    <View style={styles.pickerContainer}>
+                      <Picker selectedValue={itemForm.form} onValueChange={(val) => setItemForm({ ...itemForm, form: val })}>
+                        <Picker.Item label="Tablet" value="Tablet" />
+                        <Picker.Item label="Capsule" value="Capsule" />
+                        <Picker.Item label="Syrup" value="Syrup" />
+                        <Picker.Item label="Injection" value="Injection" />
+                        <Picker.Item label="Ointment" value="Ointment" />
+                        <Picker.Item label="Drops" value="Drops" />
+                      </Picker>
+                    </View>
+                  </View>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Stock Qty *</Text>
+                    <TextInput style={styles.input} placeholder="e.g. 100" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.stock_quantity} onChangeText={(val) => setItemForm({ ...itemForm, stock_quantity: val })} />
+                  </View>
                 </View>
-                <View style={{ flex: 1, marginLeft: 6 }}>
-                  <Text style={styles.label}>Expiry (YYYY-MM-DD)</Text>
-                  <TextInput style={styles.input} placeholder="2027-12-31" placeholderTextColor="#64748B" value={itemForm.expiry_date} onChangeText={(val) => setItemForm({ ...itemForm, expiry_date: val })} />
-                </View>
-              </View>
 
-              <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 6 }}>
-                  <Text style={styles.label}>Reorder Level</Text>
-                  <TextInput style={styles.input} placeholder="10" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.reorder_level} onChangeText={(val) => setItemForm({ ...itemForm, reorder_level: val })} />
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Batch Number</Text>
+                    <TextInput style={styles.input} placeholder="e.g. B-9982" placeholderTextColor="#64748B" value={itemForm.batch_number} onChangeText={(val) => setItemForm({ ...itemForm, batch_number: val })} />
+                  </View>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Expiry (YYYY-MM-DD)</Text>
+                    <TextInput style={styles.input} placeholder="2027-12-31" placeholderTextColor="#64748B" value={itemForm.expiry_date} onChangeText={(val) => setItemForm({ ...itemForm, expiry_date: val })} />
+                  </View>
                 </View>
-                <View style={{ flex: 1, marginLeft: 6 }}>
-                  <Text style={styles.label}>Selling Price (₹)</Text>
-                  <TextInput style={styles.input} placeholder="45.00" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.selling_price} onChangeText={(val) => setItemForm({ ...itemForm, selling_price: val })} />
-                </View>
-              </View>
 
-              <TouchableOpacity style={styles.primaryButton} onPress={handleSaveInventoryItem}>
-                <Text style={styles.primaryButtonText}>Save Stock Item</Text>
-              </TouchableOpacity>
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Reorder Level</Text>
+                    <TextInput style={styles.input} placeholder="10" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.reorder_level} onChangeText={(val) => setItemForm({ ...itemForm, reorder_level: val })} />
+                  </View>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Selling Price (₹)</Text>
+                    <TextInput style={styles.input} placeholder="45.00" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.selling_price} onChangeText={(val) => setItemForm({ ...itemForm, selling_price: val })} />
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.saveStockBtn} onPress={handleSaveInventoryItem}>
+                  <Text style={styles.saveStockBtnText}>Save Stock Item</Text>
+                </TouchableOpacity>
+              </ScrollView>
             </TouchableOpacity>
-          </ScrollView>
+          </View>
         </TouchableOpacity>
       </Modal>
 
@@ -1493,22 +1491,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 16,
   },
-  modalScrollContent: {
-    flexGrow: 1,
+  modalCenterWrapper: {
+    width: '100%',
+    maxWidth: 380,
+    maxHeight: '90%',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    width: '100%',
   },
   inventoryModalCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 20,
+    padding: 18,
     width: '100%',
-    maxWidth: 420,
-    alignSelf: 'center',
+    maxHeight: '100%',
     ...SHADOWS.large,
   },
   modalHeaderRow: {
@@ -1516,12 +1513,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     width: '100%',
-    marginBottom: 16,
+    marginBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
-    paddingBottom: 12,
+    paddingBottom: 10,
   },
-  modalTitle: { ...TYPOGRAPHY.h2, color: COLORS.primary },
+  modalTitle: { 
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.primary 
+  },
   modalSubTitle: {
     fontSize: 12,
     color: COLORS.textSecondary,
@@ -1539,6 +1540,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textSecondary,
     fontWeight: 'bold',
+  },
+  col: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  saveStockBtn: {
+    backgroundColor: '#1A9988',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+    width: '100%',
+  },
+  saveStockBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
   },
 
   calendarModalContent: {
