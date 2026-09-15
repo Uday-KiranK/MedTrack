@@ -518,10 +518,10 @@ export default function DoctorDashboard() {
         </ScrollView>
       </View>
 
-      <View style={styles.content}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
+        <View style={styles.content}>
           {tab === 'create' ? (
-            <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
+            <ScrollView contentContainerStyle={{ paddingBottom: 320 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true} showsVerticalScrollIndicator={true}>
             <View style={styles.formCard}>
                <Text style={styles.sectionTitle}>{t('New Prescription')}</Text>
                
@@ -616,7 +616,7 @@ export default function DoctorDashboard() {
                      />
 
                      <View style={styles.row}>
-                       <View style={{flex: 1, marginRight: 8}}>
+                       <View style={styles.col}>
                           <Text style={styles.label}>{t('Schedule')}</Text>
                           <View style={styles.pickerContainer}>
                             <Picker selectedValue={med.schedule_type} onValueChange={(val) => updateMedicineRow(index, 'schedule_type', val)}>
@@ -626,7 +626,7 @@ export default function DoctorDashboard() {
                             </Picker>
                           </View>
                        </View>
-                       <View style={{flex: 1, marginLeft: 8}}>
+                       <View style={styles.col}>
                           <Text style={styles.label}>
                             {med.schedule_type === 'weekly' 
                               ? t('Weeks') 
@@ -645,7 +645,7 @@ export default function DoctorDashboard() {
                      </View>
 
                      <View style={styles.row}>
-                       <View style={{flex: 1, marginRight: 8}}>
+                       <View style={styles.col}>
                           <Text style={styles.label}>{t('Food Instructions')}</Text>
                           <View style={styles.pickerContainer}>
                             <Picker selectedValue={med.food_instruction} onValueChange={(val) => updateMedicineRow(index, 'food_instruction', val)}>
@@ -655,7 +655,7 @@ export default function DoctorDashboard() {
                             </Picker>
                           </View>
                        </View>
-                       <View style={{flex: 1, marginLeft: 8}}>
+                       <View style={styles.col}>
                           <Text style={styles.label}>{t('Alarm Time(HH:MM)')}</Text>
                           <TextInput 
                             style={styles.input} 
@@ -768,7 +768,7 @@ export default function DoctorDashboard() {
                 <TextInput style={styles.input} placeholderTextColor="#64748B" value={editingMedicine.dosage} onChangeText={(val) => setEditingMedicine({...editingMedicine, dosage: val})} />
 
                 <View style={styles.row}>
-                  <View style={{flex: 1, marginRight: 8}}>
+                  <View style={styles.col}>
                      <Text style={styles.label}>{t('Schedule')}</Text>
                      <View style={styles.pickerContainer}>
                        <Picker selectedValue={editingMedicine.schedule_type} onValueChange={(val) => setEditingMedicine({...editingMedicine, schedule_type: val})}>
@@ -778,7 +778,7 @@ export default function DoctorDashboard() {
                        </Picker>
                      </View>
                   </View>
-                  <View style={{flex: 1, marginLeft: 8}}>
+                  <View style={styles.col}>
                      <Text style={styles.label}>
                        {editingMedicine.schedule_type === 'weekly' 
                           ? t('Weeks') 
@@ -791,7 +791,7 @@ export default function DoctorDashboard() {
                 </View>
 
                 <View style={styles.row}>
-                  <View style={{flex: 1, marginRight: 8}}>
+                  <View style={styles.col}>
                      <Text style={styles.label}>{t('Food Instructions')}</Text>
                      <View style={styles.pickerContainer}>
                        <Picker selectedValue={editingMedicine.food_instruction} onValueChange={(val) => setEditingMedicine({...editingMedicine, food_instruction: val})}>
@@ -801,7 +801,7 @@ export default function DoctorDashboard() {
                        </Picker>
                      </View>
                   </View>
-                  <View style={{flex: 1, marginLeft: 8}}>
+                  <View style={styles.col}>
                      <Text style={styles.label}>{t('Alarm Time(HH:MM)')}</Text>
                      <TextInput style={styles.input} placeholderTextColor="#64748B" value={editingMedicine.custom_times} onChangeText={(val) => setEditingMedicine({...editingMedicine, custom_times: val})} />
                   </View>
@@ -1173,11 +1173,11 @@ const styles = StyleSheet.create({
     ...SHADOWS.small,
   },
   sectionTitle: { ...TYPOGRAPHY.h3, marginBottom: 16, color: '#1A9988' },
-  label: { ...TYPOGRAPHY.caption, color: '#334155', marginBottom: 5, fontWeight: '700' },
+  label: { ...TYPOGRAPHY.caption, color: '#334155', marginBottom: 6, fontWeight: '700', fontSize: 13 },
   input: {
     backgroundColor: COLORS.inputBg,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    height: 48,
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: COLORS.border,
@@ -1192,9 +1192,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.border,
     marginBottom: 14,
+    height: 48,
+    justifyContent: 'center',
     overflow: 'hidden'
   },
-  row: { flexDirection: 'row' },
+  row: { 
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 2,
+  },
   primaryButton: {
     backgroundColor: '#1A9988',
     paddingVertical: 14,

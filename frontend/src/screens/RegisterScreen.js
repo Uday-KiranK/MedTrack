@@ -199,8 +199,8 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: COLORS.inputBg,
     paddingHorizontal: 16,
-    paddingVertical: 13,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 10,
     borderWidth: 1.5,
     borderColor: COLORS.border,
     ...TYPOGRAPHY.body,
