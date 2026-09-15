@@ -6,21 +6,23 @@ import * as Speech from 'expo-speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import * as Notifications from 'expo-notifications';
 
 const isExpoGo = Constants?.executionEnvironment === ExecutionEnvironment?.StoreClient;
 
-// Setup background/foreground notification behaviour safely
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
-} catch (e) {
-  console.log("Notification handler note:", e.message);
+let Notifications = null;
+if (!isExpoGo) {
+  try {
+    Notifications = require('expo-notifications');
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch (e) {
+    console.log("Notification loader note:", e.message);
+  }
 }
 
 // Safe Audio loader for SDK 57 compatibility
@@ -306,6 +308,7 @@ export default function PatientDashboard() {
   }, []);
 
   async function requestNotificationPermissions() {
+    if (!Notifications) return false;
     try {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -333,6 +336,7 @@ export default function PatientDashboard() {
   }
 
   const scheduleAllNotifications = async (medList) => {
+    if (!Notifications) return;
     try {
       await Notifications.cancelAllScheduledNotificationsAsync();
       for (const med of medList) {
