@@ -387,10 +387,12 @@ export default function PatientDashboard() {
     setLoadingMeds(true);
     try {
       const res = await axios.get(`${API_URL}/prescriptions/my`);
-      setMedicines(res.data);
-      scheduleAllNotifications(res.data);
+      const data = Array.isArray(res.data) ? res.data : [];
+      setMedicines(data);
+      scheduleAllNotifications(data);
     } catch (e) {
       console.log('Fetch meds error', e); 
+      setMedicines([]);
     } finally {
       setLoadingMeds(false);
     }

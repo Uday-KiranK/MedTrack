@@ -70,12 +70,14 @@ export default function DoctorDashboard() {
     setLoadingPatients(true);
     try {
       const res = await axios.get(`${API_URL}/doctor/my-patients`);
-      setMyPatients(res.data);
-      if (res.data.length > 0 && !patientId) {
-         setPatientId(res.data[0].id.toString());
+      const data = Array.isArray(res.data) ? res.data : [];
+      setMyPatients(data);
+      if (data.length > 0 && !patientId) {
+         setPatientId(data[0].id.toString());
       }
     } catch (e) {
       console.log('Error fetching patients', e);
+      setMyPatients([]);
     } finally {
       setLoadingPatients(false);
     }
@@ -85,9 +87,11 @@ export default function DoctorDashboard() {
     setLoadingInventory(true);
     try {
       const res = await axios.get(`${API_URL}/inventory`);
-      setInventoryItems(res.data);
+      const data = Array.isArray(res.data) ? res.data : [];
+      setInventoryItems(data);
     } catch (e) {
       console.log('Error fetching inventory', e);
+      setInventoryItems([]);
     } finally {
       setLoadingInventory(false);
     }
@@ -102,9 +106,11 @@ export default function DoctorDashboard() {
     setLoadingPatientMeds(true);
     try {
       const res = await axios.get(`${API_URL}/prescriptions/doctor/patient/${pId}`);
-      setPatientMedicines(res.data);
+      const data = Array.isArray(res.data) ? res.data : [];
+      setPatientMedicines(data);
     } catch (error) {
-      alert("Failed to fetch prescriptions");
+      console.log("Failed to fetch prescriptions", error);
+      setPatientMedicines([]);
     } finally {
       setLoadingPatientMeds(false);
     }
@@ -442,12 +448,17 @@ export default function DoctorDashboard() {
     setPatientMedicines([]);
   };
 
-  const filteredInventory = inventoryItems.filter(item => 
-    item.medicine_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (item.brand_name && item.brand_name.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const safeInventory = Array.isArray(inventoryItems) ? inventoryItems : [];
+  const safeSearchQuery = (searchQuery || '').toLowerCase();
+  
+  const filteredInventory = safeInventory.filter(item => {
+    if (!item) return false;
+    const nameMatch = item.medicine_name ? item.medicine_name.toLowerCase().includes(safeSearchQuery) : false;
+    const brandMatch = item.brand_name ? item.brand_name.toLowerCase().includes(safeSearchQuery) : false;
+    return nameMatch || brandMatch;
+  });
 
-  const lowStockCount = inventoryItems.filter(i => i.stock_quantity <= i.reorder_level).length;
+  const lowStockCount = safeInventory.filter(i => i && (i.stock_quantity ?? 0) <= (i.reorder_level ?? 10)).length;
 
   return (
     <View style={styles.container}>
