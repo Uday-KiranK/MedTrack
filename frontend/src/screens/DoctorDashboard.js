@@ -482,34 +482,40 @@ export default function DoctorDashboard() {
       </View>
 
       {/* Tabs */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, tab === 'create' && styles.activeTab]}
-          onPress={() => {setTab('create'); setSelectedPatient(null); setEditingMedicine(null);}}
+      <View style={styles.tabWrapper}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.tabContainer}
         >
-          <Text style={[styles.tabText, tab === 'create' && styles.activeTabText]}>{t('New Prescription')}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, tab === 'create' && styles.activeTab]}
+            onPress={() => {setTab('create'); setSelectedPatient(null); setEditingMedicine(null);}}
+          >
+            <Text style={[styles.tabText, tab === 'create' && styles.activeTabText]}>{t('New Prescription')}</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.tab, tab === 'inventory' && styles.activeTab]}
-          onPress={() => {setTab('inventory'); setSelectedPatient(null);}}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={[styles.tabText, tab === 'inventory' && styles.activeTabText]}>{t('Pharmacy Stock')}</Text>
-            {lowStockCount > 0 && (
-              <View style={styles.tabBadge}>
-                <Text style={styles.tabBadgeText}>{lowStockCount}</Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, tab === 'inventory' && styles.activeTab]}
+            onPress={() => {setTab('inventory'); setSelectedPatient(null);}}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[styles.tabText, tab === 'inventory' && styles.activeTabText]}>{t('Pharmacy Stock')}</Text>
+              {lowStockCount > 0 && (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>{lowStockCount}</Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.tab, tab === 'patients' && styles.activeTab]}
-          onPress={() => setTab('patients')}
-        >
-          <Text style={[styles.tabText, tab === 'patients' && styles.activeTabText]}>{t('My Patients')}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, tab === 'patients' && styles.activeTab]}
+            onPress={() => setTab('patients')}
+          >
+            <Text style={[styles.tabText, tab === 'patients' && styles.activeTabText]}>{t('My Patients')}</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       <View style={styles.content}>
@@ -913,12 +919,19 @@ export default function DoctorDashboard() {
       </View>
 
       {/* Add / Edit Inventory Modal */}
-      <Modal visible={inventoryModalVisible} transparent={true} animationType="slide">
-        <View style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', width: '100%', alignItems: 'center' }}>
-            <View style={styles.inventoryModalCard}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 16 }}>
-                <Text style={styles.modalTitle}>{editingInventoryItem ? 'Edit Pharmacy Item' : 'Add Stock Item'}</Text>
+      <Modal visible={inventoryModalVisible} transparent={true} animationType="fade" onRequestClose={() => setInventoryModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setInventoryModalVisible(false)}>
+          <ScrollView 
+            contentContainerStyle={styles.modalScrollContent} 
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <TouchableOpacity activeOpacity={1} style={styles.inventoryModalCard} onPress={() => {}}>
+              <View style={styles.modalHeaderRow}>
+                <View style={{ flexShrink: 1 }}>
+                  <Text style={styles.modalTitle}>{editingInventoryItem ? 'Edit Pharmacy Item' : 'Add Stock Item'}</Text>
+                  <Text style={styles.modalSubTitle}>Clinic Pharmacy Inventory Management</Text>
+                </View>
                 <TouchableOpacity onPress={() => setInventoryModalVisible(false)} style={styles.closeBtnIcon}>
                   <Text style={styles.closeBtnText}>✕</Text>
                 </TouchableOpacity>
@@ -928,18 +941,18 @@ export default function DoctorDashboard() {
               <TextInput style={styles.input} placeholder="e.g. Amoxicillin" placeholderTextColor="#64748B" value={itemForm.medicine_name} onChangeText={(val) => setItemForm({ ...itemForm, medicine_name: val })} />
 
               <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 8 }}>
+                <View style={{ flex: 1, marginRight: 6 }}>
                   <Text style={styles.label}>Brand Name</Text>
                   <TextInput style={styles.input} placeholder="e.g. Cipla / Sun" placeholderTextColor="#64748B" value={itemForm.brand_name} onChangeText={(val) => setItemForm({ ...itemForm, brand_name: val })} />
                 </View>
-                <View style={{ flex: 1, marginLeft: 8 }}>
+                <View style={{ flex: 1, marginLeft: 6 }}>
                   <Text style={styles.label}>Strength</Text>
                   <TextInput style={styles.input} placeholder="e.g. 500mg" placeholderTextColor="#64748B" value={itemForm.strength} onChangeText={(val) => setItemForm({ ...itemForm, strength: val })} />
                 </View>
               </View>
 
               <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 8 }}>
+                <View style={{ flex: 1, marginRight: 6 }}>
                   <Text style={styles.label}>Form</Text>
                   <View style={styles.pickerContainer}>
                     <Picker selectedValue={itemForm.form} onValueChange={(val) => setItemForm({ ...itemForm, form: val })}>
@@ -952,29 +965,29 @@ export default function DoctorDashboard() {
                     </Picker>
                   </View>
                 </View>
-                <View style={{ flex: 1, marginLeft: 8 }}>
+                <View style={{ flex: 1, marginLeft: 6 }}>
                   <Text style={styles.label}>Stock Qty *</Text>
                   <TextInput style={styles.input} placeholder="e.g. 100" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.stock_quantity} onChangeText={(val) => setItemForm({ ...itemForm, stock_quantity: val })} />
                 </View>
               </View>
 
               <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 8 }}>
+                <View style={{ flex: 1, marginRight: 6 }}>
                   <Text style={styles.label}>Batch Number</Text>
                   <TextInput style={styles.input} placeholder="e.g. B-9982" placeholderTextColor="#64748B" value={itemForm.batch_number} onChangeText={(val) => setItemForm({ ...itemForm, batch_number: val })} />
                 </View>
-                <View style={{ flex: 1, marginLeft: 8 }}>
-                  <Text style={styles.label}>Expiry Date (YYYY-MM-DD)</Text>
+                <View style={{ flex: 1, marginLeft: 6 }}>
+                  <Text style={styles.label}>Expiry (YYYY-MM-DD)</Text>
                   <TextInput style={styles.input} placeholder="2027-12-31" placeholderTextColor="#64748B" value={itemForm.expiry_date} onChangeText={(val) => setItemForm({ ...itemForm, expiry_date: val })} />
                 </View>
               </View>
 
               <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={styles.label}>Reorder Warning Level</Text>
+                <View style={{ flex: 1, marginRight: 6 }}>
+                  <Text style={styles.label}>Reorder Level</Text>
                   <TextInput style={styles.input} placeholder="10" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.reorder_level} onChangeText={(val) => setItemForm({ ...itemForm, reorder_level: val })} />
                 </View>
-                <View style={{ flex: 1, marginLeft: 8 }}>
+                <View style={{ flex: 1, marginLeft: 6 }}>
                   <Text style={styles.label}>Selling Price (₹)</Text>
                   <TextInput style={styles.input} placeholder="45.00" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.selling_price} onChangeText={(val) => setItemForm({ ...itemForm, selling_price: val })} />
                 </View>
@@ -983,9 +996,9 @@ export default function DoctorDashboard() {
               <TouchableOpacity style={styles.primaryButton} onPress={handleSaveInventoryItem}>
                 <Text style={styles.primaryButtonText}>Save Stock Item</Text>
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           </ScrollView>
-        </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* Full Streak Calendar Modal */}
@@ -1115,11 +1128,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   logoutText: { color: COLORS.error, fontWeight: '600' },
-  tabContainer: {
-    flexDirection: 'row',
+  tabWrapper: {
     paddingHorizontal: 16,
     marginTop: 12,
+  },
+  tabContainer: {
+    flexDirection: 'row',
     gap: 8,
+    alignItems: 'center',
   },
   tab: {
     paddingVertical: 10,
@@ -1472,34 +1488,55 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    width: '100%',
   },
   inventoryModalCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 24,
+    padding: 20,
     width: '100%',
     maxWidth: 420,
+    alignSelf: 'center',
+    ...SHADOWS.large,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    ...SHADOWS.large
+    width: '100%',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 12,
   },
   modalTitle: { ...TYPOGRAPHY.h2, color: COLORS.primary },
+  modalSubTitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
   closeBtnIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: COLORS.textSecondary,
     fontWeight: 'bold',
   },
