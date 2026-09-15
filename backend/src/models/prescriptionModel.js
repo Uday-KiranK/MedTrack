@@ -24,7 +24,8 @@ const addMedicine = async (data) => {
     selected_days,
     food_instruction,
     instructions,
-    availability_source = 'buy_outside'
+    availability_source = 'buy_outside',
+    total_units = 1
   } = data;
 
   const res = await pool.query(
@@ -54,14 +55,13 @@ const addMedicine = async (data) => {
 
   const insertedMed = res.rows[0];
 
-  // If item is from clinic pharmacy, auto-deduct stock
+  // If item is from clinic pharmacy, auto-deduct total prescribed stock quantity
   if (availability_source === 'clinic_pharmacy') {
     try {
-      // Find doctor_id for this prescription
       const pRes = await pool.query(`SELECT doctor_id FROM prescriptions WHERE id = $1`, [prescription_id]);
       if (pRes.rows.length > 0) {
         const doctorId = pRes.rows[0].doctor_id;
-        await deductStock(doctorId, medicine_name, 1);
+        await deductStock(doctorId, medicine_name, total_units);
       }
     } catch (e) {
       console.error("Auto deduct stock error:", e.message);

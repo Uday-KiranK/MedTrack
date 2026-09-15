@@ -70,8 +70,10 @@ const updateInventoryItem = async (id, doctorId, data) => {
     selling_price: "selling_price"
   };
 
+  const processedCols = new Set();
   for (const [key, col] of Object.entries(fieldMap)) {
-    if (data[key] !== undefined) {
+    if (data[key] !== undefined && !processedCols.has(col)) {
+      processedCols.add(col);
       fields.push(`${col} = $${paramIdx}`);
       values.push(data[key]);
       paramIdx++;
@@ -110,12 +112,18 @@ const searchInventory = async (doctorId, queryStr) => {
 
 const deductStock = async (doctorId, medicineName, qty = 1) => {
   try {
+    const rawName = (medicineName || '').trim();
+    const baseName = rawName.split('(')[0].trim();
     const result = await pool.query(
       `UPDATE clinic_inventory 
        SET stock_quantity = GREATEST(0, stock_quantity - $3)
-       WHERE doctor_id = $1 AND LOWER(TRIM(medicine_name)) = LOWER(TRIM($2))
+       WHERE doctor_id = $1 AND (
+         LOWER(TRIM(medicine_name)) = LOWER(TRIM($2)) OR
+         LOWER(TRIM(medicine_name)) = LOWER(TRIM($4)) OR
+         LOWER(TRIM($2)) LIKE LOWER(CONCAT(TRIM(medicine_name), '%'))
+       )
        RETURNING *`,
-      [doctorId, medicineName, qty]
+      [doctorId, rawName, qty, baseName]
     );
     return result.rows[0] || null;
   } catch (err) {

@@ -1,4 +1,4 @@
-const pool = require("../utils/db.js"); // or correct path
+const pool = require("../utils/db.js");
 
 const {
   createPrescription,
@@ -20,31 +20,52 @@ exports.createPrescription = async (req, res) => {
     const prescription = await createPrescription(req.user.id, patientId);
 
     for (const med of medicines) {
+      let dosageQty = 1;
+      if (med.dosage) {
+        const match = med.dosage.toString().match(/(\d+)/);
+        if (match) {
+          dosageQty = parseInt(match[1], 10) || 1;
+        }
+      }
+
+      let dosesPerDay = 1;
+      if (Array.isArray(med.custom_times) && med.custom_times.length > 0) {
+        dosesPerDay = med.custom_times.length;
+      } else if (med.frequency_per_day) {
+        dosesPerDay = parseInt(med.frequency_per_day, 10) || 1;
+      }
+
+      let durationDays = parseInt(med.duration_days, 10) || 1;
+
+      // Total prescribed units = dosageQty * dosesPerDay * durationDays
+      const totalUnitsPrescribed = dosageQty * dosesPerDay * durationDays;
+
       await addMedicine({
         prescription_id: prescription.id,
         medicine_name: med.medicine_name,
         dosage: med.dosage,
         schedule_type: med.schedule_type,
         frequency_per_day: med.frequency_per_day || null,
-        duration_days: med.duration_days,
+        duration_days: durationDays,
         time_slots: med.time_slots || null,
         custom_times: med.custom_times || null,
         interval_days: med.interval_days || null,
         selected_days: med.selected_days || null,
         food_instruction: med.food_instruction,
         instructions: med.instructions,
+        availability_source: med.availability_source || 'buy_outside',
+        total_units: totalUnitsPrescribed
       });
     }
 
     res.status(201).json({ message: "Prescription created" });
   } catch (err) {
-  console.error("Prescription error:", err);
-  res.status(500).json({
-    message: "Server error",
-    error: err.message,
-  });
-}
-
+    console.error("Prescription error:", err);
+    res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
+  }
 };
 
 exports.getMyMedicines = async (req, res) => {
@@ -72,9 +93,8 @@ exports.getDoctorPrescriptions = async (req, res) => {
 exports.editMedicine = async (req, res) => {
   try {
     const { id } = req.params;
-    const data = req.body; // should contain dosage, schedule_type, etc.
+    const data = req.body;
 
-    // Validate if the doctor owns it
     const checkOwernship = await pool.query(
       "SELECT p.doctor_id FROM medicines m JOIN prescriptions p ON m.prescription_id = p.id WHERE m.id = $1",
       [id]
