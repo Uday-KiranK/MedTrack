@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, ScrollView, ActivityIndicator, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, ScrollView, ActivityIndicator, Image, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
@@ -519,8 +519,9 @@ export default function DoctorDashboard() {
       </View>
 
       <View style={styles.content}>
-        {tab === 'create' ? (
-          <ScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          {tab === 'create' ? (
+            <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
             <View style={styles.formCard}>
                <Text style={styles.sectionTitle}>{t('New Prescription')}</Text>
                
@@ -751,7 +752,7 @@ export default function DoctorDashboard() {
             )}
           </View>
         ) : editingMedicine ? (
-           <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
+           <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
              <View style={styles.formCard}>
                 <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
                    <Text style={styles.sectionTitle}>{t('Edit')}</Text>
@@ -916,12 +917,13 @@ export default function DoctorDashboard() {
             )}
           </View>
         )}
+        </KeyboardAvoidingView>
       </View>
 
       {/* Add / Edit Inventory Modal */}
       <Modal visible={inventoryModalVisible} transparent={true} animationType="fade" onRequestClose={() => setInventoryModalVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setInventoryModalVisible(false)}>
-          <View style={styles.modalCenterWrapper}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalCenterWrapper}>
             <TouchableOpacity activeOpacity={1} style={styles.inventoryModalCard} onPress={() => {}}>
               <View style={styles.modalHeaderRow}>
                 <View style={{ flex: 1, paddingRight: 8 }}>
@@ -933,7 +935,13 @@ export default function DoctorDashboard() {
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={{ width: '100%' }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <ScrollView 
+                style={{ width: '100%' }} 
+                contentContainerStyle={{ paddingBottom: 28 }}
+                showsVerticalScrollIndicator={true} 
+                keyboardShouldPersistTaps="handled"
+                automaticallyAdjustKeyboardInsets={true}
+              >
                 <Text style={styles.label}>Medicine Name *</Text>
                 <TextInput style={styles.input} placeholder="e.g. Amoxicillin" placeholderTextColor="#64748B" value={itemForm.medicine_name} onChangeText={(val) => setItemForm({ ...itemForm, medicine_name: val })} />
 
@@ -995,7 +1003,7 @@ export default function DoctorDashboard() {
                 </TouchableOpacity>
               </ScrollView>
             </TouchableOpacity>
-          </View>
+          </KeyboardAvoidingView>
         </TouchableOpacity>
       </Modal>
 
@@ -1165,24 +1173,25 @@ const styles = StyleSheet.create({
     ...SHADOWS.small,
   },
   sectionTitle: { ...TYPOGRAPHY.h3, marginBottom: 16, color: '#1A9988' },
-  label: { ...TYPOGRAPHY.caption, color: COLORS.text, marginBottom: 6, fontWeight: '600' },
+  label: { ...TYPOGRAPHY.caption, color: '#334155', marginBottom: 5, fontWeight: '700' },
   input: {
     backgroundColor: COLORS.inputBg,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
     borderColor: COLORS.border,
     ...TYPOGRAPHY.body,
-    marginBottom: 16,
+    fontSize: 14,
+    marginBottom: 14,
     color: COLORS.text,
   },
   pickerContainer: {
     backgroundColor: COLORS.inputBg,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 10,
+    borderWidth: 1.5,
     borderColor: COLORS.border,
-    marginBottom: 16,
+    marginBottom: 14,
     overflow: 'hidden'
   },
   row: { flexDirection: 'row' },

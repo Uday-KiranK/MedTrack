@@ -12,8 +12,8 @@ export const COLORS = {
   error: '#EF4444',         // Red
   warning: '#F59E0B',       // Amber
   
-  border: '#E2E8F0',        // Slate-200
-  inputBg: '#F1F5F9',       // Slate-100
+  border: '#CBD5E1',        // Slate-300 - Crisp, clear box border
+  inputBg: '#F8FAFC',       // Slate-50 - Clean contrast background
 };
 
 export const TYPOGRAPHY = {
