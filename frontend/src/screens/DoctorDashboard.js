@@ -14,16 +14,45 @@ export default function DoctorDashboard() {
   const [tab, setTab] = useState('create'); // 'create' | 'patients' | 'inventory'
   const [langModalVisible, setLangModalVisible] = useState(false);
 
+const DOSAGE_PRESETS = {
+  Tablet: ['1 Tablet', '2 Tablets', '0.5 Tablet'],
+  Capsule: ['1 Capsule', '2 Capsules'],
+  Syrup: ['5ml (1 tsp)', '10ml (2 tsp)', '15ml (1 tbsp)', '2.5ml (1/2 tsp)'],
+  Injection: ['1 Ampoule', '1 Vial', '2ml'],
+  Ointment: ['Apply Thin Layer', 'Pea-sized Amount'],
+  Drops: ['2 Drops', '3 Drops', '5 Drops', '10 Drops']
+};
+
+const SCHEDULE_PRESETS = [
+  'Once Daily',
+  'Twice Daily',
+  '3 Times Daily',
+  '4 Times Daily',
+  'Alternate Days (Every 2 days)',
+  'Every 3 Days',
+  'Weekly',
+  'Monthly',
+  'As Needed (PRN)',
+  'Custom Schedule'
+];
+
+const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
+
   // Prescription creation state
   const [patientId, setPatientId] = useState('');
   const [medicinesList, setMedicinesList] = useState([
     {
       medicine_name: '',
-      dosage: '',
+      medicine_form: 'Tablet',
+      dosage: '1 Tablet',
+      frequency_preset: 'Once Daily',
       schedule_type: 'daily',
-      duration_days: '7',
+      meal_slots: ['Breakfast'],
       food_instruction: 'After Food',
       custom_time: '08:00',
+      duration_days: '7',
+      custom_schedule_text: '',
+      custom_duration_text: '',
       availability_source: 'buy_outside',
       suggestions: [],
       showSuggestions: false
@@ -160,7 +189,11 @@ export default function DoctorDashboard() {
 
   const selectInventorySuggestion = (index, invItem) => {
     const updated = [...medicinesList];
-    updated[index].medicine_name = `${invItem.medicine_name} (${invItem.strength})`;
+    const form = invItem.form || 'Tablet';
+    updated[index].medicine_name = `${invItem.medicine_name} ${invItem.strength ? '(' + invItem.strength + ')' : ''}`;
+    updated[index].medicine_form = form;
+    const defaultDosages = DOSAGE_PRESETS[form] || DOSAGE_PRESETS['Tablet'];
+    updated[index].dosage = defaultDosages[0];
     updated[index].availability_source = 'clinic_pharmacy';
     updated[index].showSuggestions = false;
     updated[index].suggestions = [];
@@ -172,11 +205,16 @@ export default function DoctorDashboard() {
       ...medicinesList,
       {
         medicine_name: '',
-        dosage: '',
+        medicine_form: 'Tablet',
+        dosage: '1 Tablet',
+        frequency_preset: 'Once Daily',
         schedule_type: 'daily',
-        duration_days: '7',
+        meal_slots: ['Breakfast'],
         food_instruction: 'After Food',
         custom_time: '08:00',
+        duration_days: '7',
+        custom_schedule_text: '',
+        custom_duration_text: '',
         availability_source: 'buy_outside',
         suggestions: [],
         showSuggestions: false
@@ -194,6 +232,40 @@ export default function DoctorDashboard() {
   const updateMedicineRow = (index, key, val) => {
     const updated = [...medicinesList];
     updated[index][key] = val;
+
+    if (key === 'medicine_form') {
+      const defaultDosages = DOSAGE_PRESETS[val] || DOSAGE_PRESETS['Tablet'];
+      updated[index].dosage = defaultDosages[0];
+    } else if (key === 'frequency_preset') {
+      if (val === 'Twice Daily') {
+        updated[index].meal_slots = ['Breakfast', 'Dinner'];
+        updated[index].schedule_type = 'daily';
+      } else if (val === '3 Times Daily') {
+        updated[index].meal_slots = ['Breakfast', 'Lunch', 'Dinner'];
+        updated[index].schedule_type = 'daily';
+      } else if (val === '4 Times Daily') {
+        updated[index].meal_slots = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
+        updated[index].schedule_type = 'daily';
+      } else if (val === 'Weekly') {
+        updated[index].schedule_type = 'weekly';
+      } else if (val === 'Monthly') {
+        updated[index].schedule_type = 'monthly';
+      } else {
+        updated[index].schedule_type = 'daily';
+      }
+    }
+
+    setMedicinesList(updated);
+  };
+
+  const toggleMealSlot = (index, slotName) => {
+    const updated = [...medicinesList];
+    const currentSlots = updated[index].meal_slots || [];
+    if (currentSlots.includes(slotName)) {
+      updated[index].meal_slots = currentSlots.filter(s => s !== slotName);
+    } else {
+      updated[index].meal_slots = [...currentSlots, slotName];
+    }
     setMedicinesList(updated);
   };
 
@@ -205,8 +277,8 @@ export default function DoctorDashboard() {
 
     for (let i = 0; i < medicinesList.length; i++) {
       const med = medicinesList[i];
-      if (!med.medicine_name || !med.dosage || !med.duration_days) {
-        alert(`Please fill all fields for Medicine #${i + 1}`);
+      if (!med.medicine_name || !med.dosage) {
+        alert(`Please fill Medicine Name and Dosage for Medicine #${i + 1}`);
         return;
       }
     }
@@ -215,11 +287,15 @@ export default function DoctorDashboard() {
     try {
       const payloadMedicines = medicinesList.map(med => ({
         medicine_name: med.medicine_name,
+        medicine_form: med.medicine_form || 'Tablet',
         dosage: med.dosage,
-        schedule_type: med.schedule_type,
-        duration_days: parseInt(med.duration_days),
-        food_instruction: med.food_instruction,
-        custom_times: med.custom_time ? [med.custom_time] : [],
+        schedule_type: med.schedule_type || 'daily',
+        duration_days: parseInt(med.duration_days || '7', 10),
+        food_instruction: med.food_instruction || 'After Food',
+        custom_times: med.food_instruction === 'Specific Fixed Time' && med.custom_time ? [med.custom_time] : [],
+        meal_slots: med.meal_slots || [],
+        custom_schedule_text: med.frequency_preset === 'Custom Schedule' ? med.custom_schedule_text : med.frequency_preset,
+        custom_duration_text: med.duration_days === 'Custom' ? med.custom_duration_text : null,
         availability_source: med.availability_source || 'buy_outside'
       }));
 
@@ -231,11 +307,16 @@ export default function DoctorDashboard() {
       setMedicinesList([
         {
           medicine_name: '',
-          dosage: '',
+          medicine_form: 'Tablet',
+          dosage: '1 Tablet',
+          frequency_preset: 'Once Daily',
           schedule_type: 'daily',
-          duration_days: '7',
+          meal_slots: ['Breakfast'],
           food_instruction: 'After Food',
           custom_time: '08:00',
+          duration_days: '7',
+          custom_schedule_text: '',
+          custom_duration_text: '',
           availability_source: 'buy_outside',
           suggestions: [],
           showSuggestions: false
@@ -614,66 +695,153 @@ export default function DoctorDashboard() {
                        </TouchableOpacity>
                      </View>
 
-                     <Text style={styles.label}>{t('Dosage')}</Text>
-                     <TextInput 
-                       style={styles.input} 
-                       placeholder="e.g. 500mg / 1 tablet" 
-                       placeholderTextColor="#64748B"
-                       value={med.dosage}
-                       onChangeText={(val) => updateMedicineRow(index, 'dosage', val)}
-                     />
-
-                     <View style={styles.row}>
-                       <View style={styles.col}>
-                          <Text style={styles.label}>{t('Schedule')}</Text>
+                      <View style={styles.row}>
+                        <View style={styles.col}>
+                          <Text style={styles.label}>{t('Medicine Form')}</Text>
                           <View style={styles.pickerContainer}>
-                            <Picker selectedValue={med.schedule_type} onValueChange={(val) => updateMedicineRow(index, 'schedule_type', val)}>
-                              <Picker.Item label={t("Daily")} value="daily" />
-                              <Picker.Item label={t("Weekly")} value="weekly" />
-                              <Picker.Item label={t("Monthly")} value="monthly" />
+                            <Picker 
+                              selectedValue={med.medicine_form || 'Tablet'} 
+                              onValueChange={(val) => updateMedicineRow(index, 'medicine_form', val)}
+                            >
+                              <Picker.Item label="Tablet 💊" value="Tablet" />
+                              <Picker.Item label="Capsule 💊" value="Capsule" />
+                              <Picker.Item label="Syrup 🧪" value="Syrup" />
+                              <Picker.Item label="Injection 💉" value="Injection" />
+                              <Picker.Item label="Ointment 🧴" value="Ointment" />
+                              <Picker.Item label="Drops 💧" value="Drops" />
                             </Picker>
                           </View>
-                       </View>
-                       <View style={styles.col}>
-                          <Text style={styles.label}>
-                            {med.schedule_type === 'weekly' 
-                              ? t('Weeks') 
-                              : med.schedule_type === 'monthly' 
-                                ? t('Months') 
-                                : t('Days')}
-                          </Text>
-                          <TextInput 
-                            style={styles.input} 
-                            placeholderTextColor="#64748B"
-                            value={med.duration_days}
-                            onChangeText={(val) => updateMedicineRow(index, 'duration_days', val)}
-                            keyboardType="numeric"
-                          />
-                       </View>
-                     </View>
+                        </View>
 
-                     <View style={styles.row}>
-                       <View style={styles.col}>
-                          <Text style={styles.label}>{t('Food Instructions')}</Text>
+                        <View style={styles.col}>
+                          <Text style={styles.label}>{t('Frequency / Schedule')}</Text>
                           <View style={styles.pickerContainer}>
-                            <Picker selectedValue={med.food_instruction} onValueChange={(val) => updateMedicineRow(index, 'food_instruction', val)}>
-                               <Picker.Item label={t("Before Food")} value="Before Food" />
-                               <Picker.Item label={t("After Food")} value="After Food" />
-                               <Picker.Item label={t("Empty Stomach")} value="Empty Stomach" />
+                            <Picker 
+                              selectedValue={med.frequency_preset || 'Once Daily'} 
+                              onValueChange={(val) => updateMedicineRow(index, 'frequency_preset', val)}
+                            >
+                              {SCHEDULE_PRESETS.map((preset) => (
+                                <Picker.Item key={preset} label={preset} value={preset} />
+                              ))}
                             </Picker>
                           </View>
-                       </View>
-                       <View style={styles.col}>
-                          <Text style={styles.label}>{t('Alarm Time(HH:MM)')}</Text>
-                          <TextInput 
-                            style={styles.input} 
-                            placeholder="e.g. 08:30" 
+                        </View>
+                      </View>
+
+                      {med.frequency_preset === 'Custom Schedule' && (
+                        <View style={{ marginBottom: 12 }}>
+                          <Text style={styles.label}>{t('Specify Custom Schedule')}</Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="e.g. Every 2 weeks on Monday"
                             placeholderTextColor="#64748B"
-                            value={med.custom_time}
-                            onChangeText={(val) => updateMedicineRow(index, 'custom_time', val)}
+                            value={med.custom_schedule_text}
+                            onChangeText={(val) => updateMedicineRow(index, 'custom_schedule_text', val)}
                           />
-                       </View>
-                     </View>
+                        </View>
+                      )}
+
+                      <Text style={styles.label}>{t('Dosage / Quantity per intake')}</Text>
+                      <View style={styles.chipRow}>
+                        {(DOSAGE_PRESETS[med.medicine_form || 'Tablet'] || DOSAGE_PRESETS['Tablet']).map((dOption) => {
+                          const isActive = med.dosage === dOption;
+                          return (
+                            <TouchableOpacity
+                              key={dOption}
+                              style={[styles.chip, isActive && styles.chipActive]}
+                              onPress={() => updateMedicineRow(index, 'dosage', dOption)}
+                            >
+                              <Text style={[styles.chipText, isActive && styles.chipActiveText]}>{dOption}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                      <TextInput 
+                        style={[styles.input, { marginTop: 6 }]} 
+                        placeholder="Or type custom dosage (e.g. 10ml, 2 tabs)"
+                        placeholderTextColor="#64748B"
+                        value={med.dosage}
+                        onChangeText={(val) => updateMedicineRow(index, 'dosage', val)}
+                      />
+
+                      <View style={styles.row}>
+                        <View style={styles.col}>
+                           <Text style={styles.label}>{t('Duration Type')}</Text>
+                           <View style={styles.pickerContainer}>
+                             <Picker selectedValue={med.schedule_type} onValueChange={(val) => updateMedicineRow(index, 'schedule_type', val)}>
+                               <Picker.Item label={t("Daily")} value="daily" />
+                               <Picker.Item label={t("Weekly")} value="weekly" />
+                               <Picker.Item label={t("Monthly")} value="monthly" />
+                             </Picker>
+                           </View>
+                        </View>
+                        <View style={styles.col}>
+                           <Text style={styles.label}>
+                             {med.schedule_type === 'weekly' 
+                               ? t('Weeks Count') 
+                               : med.schedule_type === 'monthly' 
+                                 ? t('Months Count') 
+                                 : t('Days Count')}
+                           </Text>
+                           <TextInput 
+                             style={styles.input} 
+                             placeholderTextColor="#64748B"
+                             value={med.duration_days}
+                             onChangeText={(val) => updateMedicineRow(index, 'duration_days', val)}
+                             keyboardType="numeric"
+                           />
+                        </View>
+                      </View>
+
+                      <View style={styles.row}>
+                        <View style={styles.col}>
+                           <Text style={styles.label}>{t('Food / Timing Instruction')}</Text>
+                           <View style={styles.pickerContainer}>
+                             <Picker selectedValue={med.food_instruction} onValueChange={(val) => updateMedicineRow(index, 'food_instruction', val)}>
+                                <Picker.Item label={t("After Food")} value="After Food" />
+                                <Picker.Item label={t("Before Food")} value="Before Food" />
+                                <Picker.Item label={t("With Food")} value="With Food" />
+                                <Picker.Item label={t("Empty Stomach")} value="Empty Stomach" />
+                                <Picker.Item label={t("Specific Fixed Time")} value="Specific Fixed Time" />
+                             </Picker>
+                           </View>
+                        </View>
+
+                        {med.food_instruction === 'Specific Fixed Time' ? (
+                          <View style={styles.col}>
+                             <Text style={styles.label}>{t('Alarm Time (HH:MM)')}</Text>
+                             <TextInput 
+                               style={styles.input} 
+                               placeholder="e.g. 08:30" 
+                               placeholderTextColor="#64748B"
+                               value={med.custom_time}
+                               onChangeText={(val) => updateMedicineRow(index, 'custom_time', val)}
+                             />
+                          </View>
+                        ) : null}
+                      </View>
+
+                      {med.food_instruction !== 'Specific Fixed Time' && (
+                        <View style={{ marginTop: 8 }}>
+                          <Text style={styles.label}>{t('Select Meal Timings / Routine Slots')}</Text>
+                          <View style={styles.chipRow}>
+                            {MEAL_SLOT_OPTIONS.map((slot) => {
+                              const isSelected = (med.meal_slots || []).includes(slot);
+                              return (
+                                <TouchableOpacity
+                                  key={slot}
+                                  style={[styles.mealChip, isSelected && styles.mealChipActive]}
+                                  onPress={() => toggleMealSlot(index, slot)}
+                                >
+                                  <Text style={[styles.mealChipText, isSelected && styles.mealChipActiveText]}>
+                                    {isSelected ? '✓ ' : ''}{slot}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </View>
+                      )}
                   </View>
                ))}
 
@@ -1711,6 +1879,60 @@ const styles = StyleSheet.create({
   calendarStartCellText: {
     fontWeight: '800',
   },
+  
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  chip: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    marginRight: 4,
+    marginBottom: 4,
+  },
+  chipActive: {
+    backgroundColor: '#E0F2FE',
+    borderColor: COLORS.primary,
+  },
+  chipText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  chipActiveText: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  mealChip: {
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  mealChipActive: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  mealChipText: {
+    fontSize: 13,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  mealChipActiveText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
   calendarStartStar: {
     position: 'absolute',
     bottom: -1,

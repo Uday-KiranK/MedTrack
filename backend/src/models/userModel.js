@@ -43,10 +43,58 @@ const getDoctorPatients = async (doctorId) => {
   return result.rows;
 };
 
+const findUserById = async (id) => {
+  const result = await pool.query(
+    "SELECT id, name, email, phone, role, breakfast_time, lunch_time, dinner_time, bedtime, ringtone_uri, routine_configured FROM users WHERE id=$1",
+    [id]
+  );
+  return result.rows[0];
+};
+
+const updateUserProfile = async (id, data) => {
+  const {
+    name,
+    phone,
+    breakfast_time,
+    lunch_time,
+    dinner_time,
+    bedtime,
+    ringtone_uri,
+    routine_configured
+  } = data;
+
+  const result = await pool.query(
+    `UPDATE users SET 
+      name = COALESCE($2, name),
+      phone = COALESCE($3, phone),
+      breakfast_time = COALESCE($4, breakfast_time),
+      lunch_time = COALESCE($5, lunch_time),
+      dinner_time = COALESCE($6, dinner_time),
+      bedtime = COALESCE($7, bedtime),
+      ringtone_uri = COALESCE($8, ringtone_uri),
+      routine_configured = COALESCE($9, routine_configured)
+     WHERE id = $1 RETURNING id, name, email, phone, role, breakfast_time, lunch_time, dinner_time, bedtime, ringtone_uri, routine_configured`,
+    [
+      id,
+      name || null,
+      phone || null,
+      breakfast_time || null,
+      lunch_time || null,
+      dinner_time || null,
+      bedtime || null,
+      ringtone_uri || null,
+      routine_configured !== undefined ? routine_configured : null
+    ]
+  );
+  return result.rows[0];
+};
+
 module.exports = { 
   createUser, 
   findUserByEmail, 
-  findUserByPhone, 
+  findUserByPhone,
+  findUserById,
+  updateUserProfile,
   linkPatientToDoctor, 
   getDoctorPatients 
 };

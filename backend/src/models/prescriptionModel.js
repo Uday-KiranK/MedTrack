@@ -25,7 +25,11 @@ const addMedicine = async (data) => {
     food_instruction,
     instructions,
     availability_source = 'buy_outside',
-    total_units = 1
+    total_units = 1,
+    medicine_form = 'Tablet',
+    meal_slots = [],
+    custom_schedule_text = null,
+    custom_duration_text = null
   } = data;
 
   const res = await pool.query(
@@ -33,8 +37,9 @@ const addMedicine = async (data) => {
       prescription_id, medicine_name, dosage, schedule_type,
       frequency_per_day, duration_days, time_slots,
       custom_times, interval_days, selected_days,
-      food_instruction, instructions, availability_source
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      food_instruction, instructions, availability_source,
+      medicine_form, meal_slots, custom_schedule_text, custom_duration_text
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
     RETURNING *`,
     [
       prescription_id,
@@ -49,7 +54,11 @@ const addMedicine = async (data) => {
       selected_days,
       food_instruction,
       instructions,
-      availability_source
+      availability_source,
+      medicine_form,
+      meal_slots,
+      custom_schedule_text,
+      custom_duration_text
     ]
   );
 
@@ -75,13 +84,15 @@ const getMedicinesForPatient = async (patientId) => {
   const res = await pool.query(
     `
     SELECT m.*, p.patient_id, d.name AS doctor_name, p.created_at AS start_date,
+           u.breakfast_time, u.lunch_time, u.dinner_time, u.bedtime, u.ringtone_uri,
            COALESCE(json_agg(i.taken_at ORDER BY i.taken_at DESC) FILTER (WHERE i.taken_at IS NOT NULL), '[]') AS intakes
     FROM medicines m
     JOIN prescriptions p ON p.id = m.prescription_id
     JOIN users d ON p.doctor_id = d.id
+    JOIN users u ON p.patient_id = u.id
     LEFT JOIN medicine_intakes i ON i.medicine_id = m.id
     WHERE p.patient_id = $1
-    GROUP BY m.id, p.patient_id, d.name, p.created_at
+    GROUP BY m.id, p.patient_id, d.name, p.created_at, u.breakfast_time, u.lunch_time, u.dinner_time, u.bedtime, u.ringtone_uri
     `,
     [patientId]
   );

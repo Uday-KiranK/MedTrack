@@ -94,7 +94,19 @@ exports.login = async (req, res) => {
     );
     res.json({ 
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone }
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role, 
+        phone: user.phone,
+        breakfast_time: user.breakfast_time || '08:00',
+        lunch_time: user.lunch_time || '13:30',
+        dinner_time: user.dinner_time || '20:30',
+        bedtime: user.bedtime || '22:00',
+        ringtone_uri: user.ringtone_uri || 'default',
+        routine_configured: user.routine_configured || false
+      }
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -132,7 +144,19 @@ exports.verifyOtp = async (req, res) => {
 
     res.json({ 
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone }
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role, 
+        phone: user.phone,
+        breakfast_time: user.breakfast_time || '08:00',
+        lunch_time: user.lunch_time || '13:30',
+        dinner_time: user.dinner_time || '20:30',
+        bedtime: user.bedtime || '22:00',
+        ringtone_uri: user.ringtone_uri || 'default',
+        routine_configured: user.routine_configured || false
+      }
     });
   } catch(error) {
     console.error("Verify OTP error:", error);
@@ -143,12 +167,24 @@ exports.verifyOtp = async (req, res) => {
 // GET PROTECTED USER
 exports.getProtected = async (req, res) => {
   try {
-    const pool = require("../utils/db");
-    const result = await pool.query("SELECT id, name, email, phone, role FROM users WHERE id = $1", [req.user.id]);
-    if (result.rows.length === 0) return res.status(404).json({ message: "User not found" });
-    res.json({ user: result.rows[0] });
+    const { findUserById } = require("../models/userModel");
+    const user = await findUserById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json({ user });
   } catch(error) {
     console.error("Protected Route Error:", error);
     res.status(500).json({ message: "Server error loading protected route" });
+  }
+};
+
+// UPDATE PROFILE & ROUTINE
+exports.updateProfile = async (req, res) => {
+  try {
+    const { updateUserProfile } = require("../models/userModel");
+    const updatedUser = await updateUserProfile(req.user.id, req.body);
+    res.json({ success: true, user: updatedUser });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    res.status(500).json({ message: "Server error updating profile" });
   }
 };

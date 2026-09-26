@@ -54,7 +54,11 @@ exports.createPrescription = async (req, res) => {
         food_instruction: med.food_instruction,
         instructions: med.instructions,
         availability_source: med.availability_source || 'buy_outside',
-        total_units: totalUnitsPrescribed
+        total_units: totalUnitsPrescribed,
+        medicine_form: med.medicine_form || 'Tablet',
+        meal_slots: med.meal_slots || [],
+        custom_schedule_text: med.custom_schedule_text || null,
+        custom_duration_text: med.custom_duration_text || null
       });
     }
 
