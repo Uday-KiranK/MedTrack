@@ -558,29 +558,21 @@ export default function PatientDashboard() {
         const alarmTimes = calculateAlarmTimesForMed(med);
         if (!alarmTimes || alarmTimes.length === 0) continue;
         
+        const scheduleType = (med.schedule_type || 'daily').toLowerCase();
+
         for (const timeStr of alarmTimes) {
           const [hourStr, minuteStr] = timeStr.split(':');
           const hour = parseInt(hourStr, 10);
           const minute = parseInt(minuteStr, 10);
           if (isNaN(hour) || isNaN(minute)) continue;
 
-          // Schedule exact Date triggers for the next 7 upcoming days
-          for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-            const targetDate = new Date();
-            targetDate.setDate(now.getDate() + dayOffset);
-            targetDate.setHours(hour, minute, 0, 0);
+          const title = `${t('Medication Time!')} ⏰`;
+          const body = `${t('Take:')} ${med.medicine_name} (${med.dosage}) - ${med.food_instruction ? t(med.food_instruction) : ''}`;
+          const alarmId = `med_alarm_${med.id}_${hour}_${minute}`;
 
-            // Skip if target date/time is in the past
-            if (targetDate.getTime() <= now.getTime()) continue;
-
-            // Check if medicine is due on targetDate according to schedule
-            if (!isMedicationDueOnDate(med, targetDate)) continue;
-
-            const title = `${t('Medication Time!')} ⏰`;
-            const body = `${t('Take:')} ${med.medicine_name} (${med.dosage}) - ${med.food_instruction ? t(med.food_instruction) : ''}`;
-            
-            // 1. Schedule exact Date trigger with explicit channelId
+          if (scheduleType === 'daily') {
             await Notifications.scheduleNotificationAsync({
+              identifier: alarmId,
               content: {
                 title,
                 body,
@@ -591,16 +583,23 @@ export default function PatientDashboard() {
                 data: { medicineId: med.id },
               },
               trigger: {
-                type: Notifications.SchedulableTriggerInputTypes.DATE,
-                date: targetDate,
+                type: Notifications.SchedulableTriggerInputTypes.DAILY,
+                hour,
+                minute,
                 channelId: 'medtrack-medication-alarms-v2',
               },
             });
+          } else {
+            for (let dayOffset = 0; dayOffset < 30; dayOffset++) {
+              const targetDate = new Date();
+              targetDate.setDate(now.getDate() + dayOffset);
+              targetDate.setHours(hour, minute, 0, 0);
 
-            // 2. Also schedule repeating Daily trigger for daily schedule_type
-            if ((med.schedule_type || 'daily').toLowerCase() === 'daily') {
-              try {
+              if (targetDate.getTime() <= now.getTime()) continue;
+
+              if (isMedicationDueOnDate(med, targetDate)) {
                 await Notifications.scheduleNotificationAsync({
+                  identifier: alarmId,
                   content: {
                     title,
                     body,
@@ -611,13 +610,13 @@ export default function PatientDashboard() {
                     data: { medicineId: med.id },
                   },
                   trigger: {
-                    type: Notifications.SchedulableTriggerInputTypes.DAILY,
-                    hour,
-                    minute,
+                    type: Notifications.SchedulableTriggerInputTypes.DATE,
+                    date: targetDate,
                     channelId: 'medtrack-medication-alarms-v2',
                   },
                 });
-              } catch (e) {}
+                break;
+              }
             }
           }
         }
