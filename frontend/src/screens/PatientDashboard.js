@@ -277,22 +277,30 @@ export default function PatientDashboard() {
       await stopSound();
 
       const customUri = routine.ringtone_uri && routine.ringtone_uri !== 'default' ? routine.ringtone_uri : null;
-      let soundPlayed = false;
+      let player = null;
 
       if (createAudioPlayer) {
-        try {
-          const audioSource = customUri ? { uri: customUri } : require('../../assets/alarm.wav');
-          const player = createAudioPlayer(audioSource);
-          player.loop = true;
-          player.play();
-          soundRef.current = player;
-          soundPlayed = true;
-        } catch (audioErr) {
-          console.log("createAudioPlayer error", audioErr);
+        if (customUri) {
+          try {
+            player = createAudioPlayer({ uri: customUri });
+            player.loop = true;
+            player.play();
+          } catch (audioErr) {
+            console.log("Custom ringtone load error, falling back to default alarm.wav", audioErr);
+            player = null;
+          }
         }
-      }
-
-      if (!soundPlayed && typeof window !== 'undefined' && window.Audio) {
+        if (!player) {
+          try {
+            player = createAudioPlayer(require('../../assets/alarm.wav'));
+            player.loop = true;
+            player.play();
+          } catch (audioErr) {
+            console.log("Default alarm player error", audioErr);
+          }
+        }
+        soundRef.current = player;
+      } else if (typeof window !== 'undefined' && window.Audio) {
         try {
           const alarmWav = require('../../assets/alarm.wav');
           const webAudio = new window.Audio(typeof alarmWav === 'string' ? alarmWav : (alarmWav?.uri || customUri));
@@ -310,7 +318,7 @@ export default function PatientDashboard() {
         Speech.speak(textToSpeak, { language: lang });
         speechIntervalRef.current = setInterval(() => {
           Speech.speak(textToSpeak, { language: lang });
-        }, 6000);
+        }, 5000);
       }
 
     } catch(err) {
@@ -581,6 +589,7 @@ export default function PatientDashboard() {
                 channelId: 'medtrack-medication-alarms-v2',
                 categoryIdentifier: 'MED_ALARM_CATEGORY',
                 data: { medicineId: med.id },
+                sticky: true,
               },
               trigger: {
                 type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -608,6 +617,7 @@ export default function PatientDashboard() {
                     channelId: 'medtrack-medication-alarms-v2',
                     categoryIdentifier: 'MED_ALARM_CATEGORY',
                     data: { medicineId: med.id },
+                    sticky: true,
                   },
                   trigger: {
                     type: Notifications.SchedulableTriggerInputTypes.DATE,
