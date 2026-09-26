@@ -1,6 +1,12 @@
 import React from 'react';
 import { StyleSheet, View, Platform } from 'react-native';
-import { WebView } from 'react-native-webview';
+
+let WebView = null;
+if (Platform.OS !== 'web') {
+  try {
+    WebView = require('react-native-webview').WebView;
+  } catch (e) {}
+}
 
 const particleHtml = `
 <!DOCTYPE html>
@@ -28,46 +34,48 @@ const particleHtml = `
 <body>
   <div id="tsparticles"></div>
   <script>
-    tsParticles.load("tsparticles", {
-      fpsLimit: 60,
-      interactivity: {
-        events: {
-          onClick: { enable: true, mode: "push" },
-          onHover: { enable: true, mode: "grab" },
-          resize: true
+    if (window.tsParticles) {
+      tsParticles.load("tsparticles", {
+        fpsLimit: 60,
+        interactivity: {
+          events: {
+            onClick: { enable: true, mode: "push" },
+            onHover: { enable: true, mode: "grab" },
+            resize: true
+          },
+          modes: {
+            push: { quantity: 4 },
+            grab: { distance: 140, links: { opacity: 0.5 } }
+          }
         },
-        modes: {
-          push: { quantity: 4 },
-          grab: { distance: 140, links: { opacity: 0.5 } }
-        }
-      },
-      particles: {
-        color: { value: "#1A9988" },
-        links: {
-          color: "#1A9988",
-          distance: 150,
-          enable: true,
-          opacity: 0.3,
-          width: 1
+        particles: {
+          color: { value: "#1A9988" },
+          links: {
+            color: "#1A9988",
+            distance: 150,
+            enable: true,
+            opacity: 0.3,
+            width: 1
+          },
+          move: {
+            direction: "none",
+            enable: true,
+            outModes: { default: "bounce" },
+            random: false,
+            speed: 1,
+            straight: false
+          },
+          number: {
+            density: { enable: true, area: 800 },
+            value: 40
+          },
+          opacity: { value: 0.4 },
+          shape: { type: "circle" },
+          size: { value: { min: 1, max: 3 } }
         },
-        move: {
-          direction: "none",
-          enable: true,
-          outModes: { default: "bounce" },
-          random: false,
-          speed: 1,
-          straight: false
-        },
-        number: {
-          density: { enable: true, area: 800 },
-          value: 40
-        },
-        opacity: { value: 0.4 },
-        shape: { type: "circle" },
-        size: { value: { min: 1, max: 3 } }
-      },
-      detectRetina: true
-    });
+        detectRetina: true
+      });
+    }
   </script>
 </body>
 </html>
@@ -85,6 +93,11 @@ export default function ParticleBackground() {
     );
   }
 
+  // On Native Mobile, render clean background to avoid WebGL/WebView startup crashes
+  if (!WebView) {
+    return <View style={styles.container} pointerEvents="none" />;
+  }
+
   return (
     <View style={styles.container} pointerEvents="none">
       <WebView
@@ -95,7 +108,8 @@ export default function ParticleBackground() {
         bounces={false}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
-        androidLayerType="hardware"
+        onError={() => {}}
+        onRenderProcessGone={() => {}}
       />
     </View>
   );
@@ -104,8 +118,8 @@ export default function ParticleBackground() {
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: -1, // places it behind all other react native layers
-    backgroundColor: '#F5F7FA', // matches COLORS.background
+    zIndex: -1,
+    backgroundColor: '#F5F7FA',
   },
   webview: {
     flex: 1,

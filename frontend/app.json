@@ -16,6 +16,12 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#1A9988"
       },
+      "permissions": [
+        "NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "VIBRATE"
+      ],
       "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
@@ -30,7 +36,8 @@
       "expo-font",
       "expo-status-bar",
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      "expo-notifications"
     ]
   }
 }
