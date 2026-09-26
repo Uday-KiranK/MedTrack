@@ -14,29 +14,33 @@ export default function DoctorDashboard() {
   const [tab, setTab] = useState('create'); // 'create' | 'patients' | 'inventory'
   const [langModalVisible, setLangModalVisible] = useState(false);
 
-const DOSAGE_PRESETS = {
-  Tablet: ['1 Tablet', '2 Tablets', '0.5 Tablet'],
-  Capsule: ['1 Capsule', '2 Capsules'],
-  Syrup: ['5ml (1 tsp)', '10ml (2 tsp)', '15ml (1 tbsp)', '2.5ml (1/2 tsp)'],
-  Injection: ['1 Ampoule', '1 Vial', '2ml'],
-  Ointment: ['Apply Thin Layer', 'Pea-sized Amount'],
-  Drops: ['2 Drops', '3 Drops', '5 Drops', '10 Drops']
-};
+  const DOSAGE_PRESETS = {
+    Tablet: ['1 Tablet', '2 Tablets', '0.5 Tablet'],
+    Capsule: ['1 Capsule', '2 Capsules'],
+    Syrup: ['5ml (1 tsp)', '10ml (2 tsp)', '15ml (1 tbsp)', '2.5ml (1/2 tsp)'],
+    Injection: ['1 Ampoule', '1 Vial', '2ml'],
+    Ointment: ['Apply Thin Layer', 'Pea-sized Amount'],
+    Drops: ['2 Drops', '3 Drops', '5 Drops', '10 Drops']
+  };
 
-const SCHEDULE_PRESETS = [
-  'Once Daily',
-  'Twice Daily',
-  '3 Times Daily',
-  '4 Times Daily',
-  'Alternate Days (Every 2 days)',
-  'Every 3 Days',
-  'Weekly',
-  'Monthly',
-  'As Needed (PRN)',
-  'Custom Schedule'
-];
+  const SCHEDULE_PRESETS = [
+    'Once Daily',
+    'Twice Daily',
+    '3 Times Daily',
+    '4 Times Daily',
+    'Alternate Days (Every 2 days)',
+    'Every 3 Days',
+    'Weekly',
+    'Monthly',
+    'As Needed (PRN)',
+    'Custom Schedule'
+  ];
 
-const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
+  const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
+
+  // Start Date Option State
+  const [startDateOption, setStartDateOption] = useState('Today'); // 'Today' | 'Tomorrow' | 'Custom'
+  const [customStartDate, setCustomStartDate] = useState('');
 
   // Prescription creation state
   const [patientId, setPatientId] = useState('');
@@ -49,7 +53,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
       schedule_type: 'daily',
       meal_slots: ['Breakfast'],
       food_instruction: 'After Food',
-      custom_time: '08:00',
+      custom_times: ['08:00'],
       duration_days: '7',
       custom_schedule_text: '',
       custom_duration_text: '',
@@ -76,7 +80,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
   // Editing state
   const [editingMedicine, setEditingMedicine] = useState(null);
 
-  // Pharmacy Inventory State (Feature 1)
+  // Pharmacy Inventory State
   const [inventoryItems, setInventoryItems] = useState([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -165,11 +169,10 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
     }
   };
 
-  // Inventory autocomplete search for Prescription Form
   const handleMedicineNameChange = async (index, val) => {
     const updated = [...medicinesList];
     updated[index].medicine_name = val;
-    updated[index].availability_source = 'buy_outside'; // Default
+    updated[index].availability_source = 'buy_outside';
     
     if (val.trim().length > 1) {
       try {
@@ -211,7 +214,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
         schedule_type: 'daily',
         meal_slots: ['Breakfast'],
         food_instruction: 'After Food',
-        custom_time: '08:00',
+        custom_times: ['08:00'],
         duration_days: '7',
         custom_schedule_text: '',
         custom_duration_text: '',
@@ -229,6 +232,30 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
     setMedicinesList(updated);
   };
 
+  const getMaxSlotsForFrequency = (freq) => {
+    if (freq === 'Once Daily') return 1;
+    if (freq === 'Twice Daily') return 2;
+    if (freq === '3 Times Daily') return 3;
+    if (freq === '4 Times Daily') return 4;
+    return 1;
+  };
+
+  const getDefaultSlotsForFrequency = (freq) => {
+    if (freq === 'Once Daily') return ['Breakfast'];
+    if (freq === 'Twice Daily') return ['Breakfast', 'Dinner'];
+    if (freq === '3 Times Daily') return ['Breakfast', 'Lunch', 'Dinner'];
+    if (freq === '4 Times Daily') return ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
+    return ['Breakfast'];
+  };
+
+  const getDefaultTimesForFrequency = (freq) => {
+    if (freq === 'Once Daily') return ['08:00'];
+    if (freq === 'Twice Daily') return ['08:00', '20:00'];
+    if (freq === '3 Times Daily') return ['08:00', '14:00', '20:00'];
+    if (freq === '4 Times Daily') return ['08:00', '12:00', '18:00', '22:00'];
+    return ['08:00'];
+  };
+
   const updateMedicineRow = (index, key, val) => {
     const updated = [...medicinesList];
     updated[index][key] = val;
@@ -237,36 +264,67 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
       const defaultDosages = DOSAGE_PRESETS[val] || DOSAGE_PRESETS['Tablet'];
       updated[index].dosage = defaultDosages[0];
     } else if (key === 'frequency_preset') {
-      if (val === 'Twice Daily') {
-        updated[index].meal_slots = ['Breakfast', 'Dinner'];
-        updated[index].schedule_type = 'daily';
-      } else if (val === '3 Times Daily') {
-        updated[index].meal_slots = ['Breakfast', 'Lunch', 'Dinner'];
-        updated[index].schedule_type = 'daily';
-      } else if (val === '4 Times Daily') {
-        updated[index].meal_slots = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
-        updated[index].schedule_type = 'daily';
-      } else if (val === 'Weekly') {
+      const maxSlots = getMaxSlotsForFrequency(val);
+      updated[index].meal_slots = getDefaultSlotsForFrequency(val);
+      updated[index].custom_times = getDefaultTimesForFrequency(val);
+
+      if (val === 'Weekly') {
         updated[index].schedule_type = 'weekly';
       } else if (val === 'Monthly') {
         updated[index].schedule_type = 'monthly';
+      } else if (val === 'Alternate Days (Every 2 days)') {
+        updated[index].schedule_type = 'alternate_days';
+      } else if (val === 'Every 3 Days') {
+        updated[index].schedule_type = 'every_3_days';
       } else {
         updated[index].schedule_type = 'daily';
+      }
+    } else if (key === 'food_instruction') {
+      if (val === 'Empty Stomach') {
+        updated[index].meal_slots = ['Breakfast'];
+        updated[index].custom_times = ['07:30'];
       }
     }
 
     setMedicinesList(updated);
   };
 
+  const updateCustomTimeAtIndex = (medIndex, timeIndex, val) => {
+    const updated = [...medicinesList];
+    const times = [...(updated[medIndex].custom_times || ['08:00'])];
+    times[timeIndex] = val;
+    updated[medIndex].custom_times = times;
+    setMedicinesList(updated);
+  };
+
   const toggleMealSlot = (index, slotName) => {
     const updated = [...medicinesList];
-    const currentSlots = updated[index].meal_slots || [];
+    const freq = updated[index].frequency_preset || 'Once Daily';
+    const maxSlots = getMaxSlotsForFrequency(freq);
+    let currentSlots = updated[index].meal_slots || [];
+
     if (currentSlots.includes(slotName)) {
-      updated[index].meal_slots = currentSlots.filter(s => s !== slotName);
+      currentSlots = currentSlots.filter(s => s !== slotName);
     } else {
-      updated[index].meal_slots = [...currentSlots, slotName];
+      if (currentSlots.length >= maxSlots) {
+        currentSlots = [...currentSlots.slice(1), slotName];
+      } else {
+        currentSlots = [...currentSlots, slotName];
+      }
     }
+    updated[index].meal_slots = currentSlots;
     setMedicinesList(updated);
+  };
+
+  const computeComputedStartDate = () => {
+    const d = new Date();
+    if (startDateOption === 'Tomorrow') {
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split('T')[0];
+    } else if (startDateOption === 'Custom' && customStartDate.trim()) {
+      return customStartDate.trim();
+    }
+    return d.toISOString().split('T')[0];
   };
 
   const handleCreatePrescription = async () => {
@@ -283,6 +341,8 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
       }
     }
 
+    const startDateStr = computeComputedStartDate();
+
     setCreating(true);
     try {
       const payloadMedicines = medicinesList.map(med => ({
@@ -292,17 +352,20 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
         schedule_type: med.schedule_type || 'daily',
         duration_days: parseInt(med.duration_days || '7', 10),
         food_instruction: med.food_instruction || 'After Food',
-        custom_times: med.food_instruction === 'Specific Fixed Time' && med.custom_time ? [med.custom_time] : [],
+        custom_times: med.food_instruction === 'Specific Fixed Time' ? (med.custom_times || ['08:00']) : (med.food_instruction === 'Empty Stomach' ? ['07:30'] : []),
         meal_slots: med.meal_slots || [],
         custom_schedule_text: med.frequency_preset === 'Custom Schedule' ? med.custom_schedule_text : med.frequency_preset,
         custom_duration_text: med.duration_days === 'Custom' ? med.custom_duration_text : null,
-        availability_source: med.availability_source || 'buy_outside'
+        availability_source: med.availability_source || 'buy_outside',
+        start_date: startDateStr
       }));
 
       await axios.post(`${API_URL}/prescriptions`, {
         patientId: parseInt(patientId),
-        medicines: payloadMedicines
+        medicines: payloadMedicines,
+        startDate: startDateStr
       });
+
       alert('Prescription created successfully!');
       setMedicinesList([
         {
@@ -313,7 +376,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
           schedule_type: 'daily',
           meal_slots: ['Breakfast'],
           food_instruction: 'After Food',
-          custom_time: '08:00',
+          custom_times: ['08:00'],
           duration_days: '7',
           custom_schedule_text: '',
           custom_duration_text: '',
@@ -322,7 +385,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
           showSuggestions: false
         }
       ]);
-      fetchInventory(); // refresh inventory stock
+      fetchInventory();
     } catch (e) {
       alert('Failed to prescribe: ' + (e.response?.data?.message || e.message));
     } finally {
@@ -330,7 +393,6 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
     }
   };
 
-  // Inventory Actions
   const handleSaveInventoryItem = async () => {
     if (!itemForm.medicine_name || !itemForm.stock_quantity) {
       return alert('Please enter medicine name and stock quantity');
@@ -427,11 +489,15 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
     const start = new Date(item.start_date);
     const now = new Date();
     
-    let totalDays = item.duration_days;
+    let totalDays = item.duration_days || 7;
     if (item.schedule_type === 'weekly') {
-      totalDays = item.duration_days * 7;
+      totalDays = (item.duration_days || 1) * 7;
     } else if (item.schedule_type === 'monthly') {
-      totalDays = item.duration_days * 30;
+      totalDays = (item.duration_days || 1) * 30;
+    } else if (item.schedule_type === 'alternate_days') {
+      totalDays = (item.duration_days || 1) * 2;
+    } else if (item.schedule_type === 'every_3_days') {
+      totalDays = (item.duration_days || 1) * 3;
     }
     
     const end = new Date(start.getTime() + totalDays * 24 * 60 * 60 * 1000);
@@ -463,7 +529,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
     const start = new Date(startDateStr);
     start.setHours(0,0,0,0);
     
-    let totalDays = durationDays;
+    let totalDays = durationDays || 7;
     if (scheduleType === 'weekly') totalDays = durationDays * 7;
     else if (scheduleType === 'monthly') totalDays = durationDays * 30;
     const end = new Date(start.getTime() + totalDays * 24 * 60 * 60 * 1000);
@@ -503,12 +569,15 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
   const startEdit = (med) => {
     setEditingMedicine({
       id: med.id,
-      medicine_name: med.medicine_name,
-      dosage: med.dosage,
+      medicine_name: med.medicine_name || '',
+      medicine_form: med.medicine_form || 'Tablet',
+      dosage: med.dosage || '1 Tablet',
       schedule_type: med.schedule_type || 'daily',
       duration_days: med.duration_days?.toString() || '7',
       food_instruction: med.food_instruction || 'After Food',
-      custom_times: med.custom_times && med.custom_times.length > 0 ? med.custom_times[0].substring(0, 5) : '08:00'
+      meal_slots: med.meal_slots || ['Breakfast'],
+      custom_times: med.custom_times && med.custom_times.length > 0 ? med.custom_times : ['08:00'],
+      availability_source: med.availability_source || 'buy_outside'
     });
   };
 
@@ -516,15 +585,18 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
     try {
       const payload = {
         medicine_name: editingMedicine.medicine_name,
+        medicine_form: editingMedicine.medicine_form,
         dosage: editingMedicine.dosage,
         schedule_type: editingMedicine.schedule_type,
-        duration_days: parseInt(editingMedicine.duration_days),
+        duration_days: parseInt(editingMedicine.duration_days || '7', 10),
         food_instruction: editingMedicine.food_instruction,
-        custom_times: editingMedicine.custom_times ? [editingMedicine.custom_times] : []
+        meal_slots: editingMedicine.meal_slots || [],
+        custom_times: editingMedicine.food_instruction === 'Specific Fixed Time' ? editingMedicine.custom_times : [],
+        availability_source: editingMedicine.availability_source || 'buy_outside'
       };
       
       await axios.put(`${API_URL}/prescriptions/medicine/${editingMedicine.id}`, payload);
-      alert('Updated successfully!');
+      alert('Prescription updated successfully!');
       setEditingMedicine(null);
       fetchPatientMedicines(selectedPatient.id);
     } catch (e) {
@@ -619,15 +691,46 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                  <Picker
                    selectedValue={patientId}
                    onValueChange={(itemValue) => setPatientId(itemValue)}
+                   style={styles.pickerStyle}
+                   dropdownIconColor="#0F172A"
                  >
-                   <Picker.Item label={t("-- Select Patient --")} value="" />
+                   <Picker.Item label={t("-- Select Patient --")} value="" color="#0F172A" style={styles.pickerItemStyle} />
                    {myPatients.map(p => (
-                     <Picker.Item key={p.id} label={`${p.name} (${p.phone})`} value={p.id.toString()} />
+                     <Picker.Item key={p.id} label={`${p.name} (${p.phone})`} value={p.id.toString()} color="#0F172A" style={styles.pickerItemStyle} />
                    ))}
                  </Picker>
                </View>
 
-               {medicinesList.map((med, index) => (
+               {/* Start Date Option */}
+               <View style={{ marginBottom: 16, backgroundColor: '#F8FAFC', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1' }}>
+                 <Text style={styles.label}>🗓️ When to start medication?</Text>
+                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                   {['Today', 'Tomorrow', 'Custom'].map((opt) => (
+                     <TouchableOpacity
+                       key={opt}
+                       style={[styles.chip, startDateOption === opt && styles.chipActive]}
+                       onPress={() => setStartDateOption(opt)}
+                     >
+                       <Text style={[styles.chipText, startDateOption === opt && styles.chipActiveText]}>
+                         {opt === 'Today' ? '☀️ Starts Today' : opt === 'Tomorrow' ? '🌅 Starts Tomorrow' : '📅 Custom Date'}
+                       </Text>
+                     </TouchableOpacity>
+                   ))}
+                 </View>
+                 {startDateOption === 'Custom' && (
+                   <TextInput
+                     style={[styles.input, { marginTop: 10, color: '#0F172A' }]}
+                     placeholder="YYYY-MM-DD (e.g. 2026-10-01)"
+                     placeholderTextColor="#64748B"
+                     value={customStartDate}
+                     onChangeText={setCustomStartDate}
+                   />
+                 )}
+               </View>
+
+               {medicinesList.map((med, index) => {
+                 const requiredDoseCount = getMaxSlotsForFrequency(med.frequency_preset);
+                 return (
                   <View key={index} style={styles.medicineFormCard}>
                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                         <Text style={styles.medHeaderTitle}>{t('Medicine')} #{index + 1}</Text>
@@ -640,7 +743,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
 
                      <Text style={styles.label}>{t('Medicine Name')}</Text>
                      <TextInput 
-                       style={styles.input} 
+                       style={[styles.input, { color: '#0F172A' }]} 
                        placeholder="e.g. Paracetamol 500mg" 
                        placeholderTextColor="#64748B"
                        value={med.medicine_name}
@@ -702,13 +805,15 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                             <Picker 
                               selectedValue={med.medicine_form || 'Tablet'} 
                               onValueChange={(val) => updateMedicineRow(index, 'medicine_form', val)}
+                              style={styles.pickerStyle}
+                              dropdownIconColor="#0F172A"
                             >
-                              <Picker.Item label="Tablet 💊" value="Tablet" />
-                              <Picker.Item label="Capsule 💊" value="Capsule" />
-                              <Picker.Item label="Syrup 🧪" value="Syrup" />
-                              <Picker.Item label="Injection 💉" value="Injection" />
-                              <Picker.Item label="Ointment 🧴" value="Ointment" />
-                              <Picker.Item label="Drops 💧" value="Drops" />
+                              <Picker.Item label="Tablet 💊" value="Tablet" color="#0F172A" style={styles.pickerItemStyle} />
+                              <Picker.Item label="Capsule 💊" value="Capsule" color="#0F172A" style={styles.pickerItemStyle} />
+                              <Picker.Item label="Syrup 🧪" value="Syrup" color="#0F172A" style={styles.pickerItemStyle} />
+                              <Picker.Item label="Injection 💉" value="Injection" color="#0F172A" style={styles.pickerItemStyle} />
+                              <Picker.Item label="Ointment 🧴" value="Ointment" color="#0F172A" style={styles.pickerItemStyle} />
+                              <Picker.Item label="Drops 💧" value="Drops" color="#0F172A" style={styles.pickerItemStyle} />
                             </Picker>
                           </View>
                         </View>
@@ -719,9 +824,11 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                             <Picker 
                               selectedValue={med.frequency_preset || 'Once Daily'} 
                               onValueChange={(val) => updateMedicineRow(index, 'frequency_preset', val)}
+                              style={styles.pickerStyle}
+                              dropdownIconColor="#0F172A"
                             >
                               {SCHEDULE_PRESETS.map((preset) => (
-                                <Picker.Item key={preset} label={preset} value={preset} />
+                                <Picker.Item key={preset} label={preset} value={preset} color="#0F172A" style={styles.pickerItemStyle} />
                               ))}
                             </Picker>
                           </View>
@@ -732,7 +839,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                         <View style={{ marginBottom: 12 }}>
                           <Text style={styles.label}>{t('Specify Custom Schedule')}</Text>
                           <TextInput
-                            style={styles.input}
+                            style={[styles.input, { color: '#0F172A' }]}
                             placeholder="e.g. Every 2 weeks on Monday"
                             placeholderTextColor="#64748B"
                             value={med.custom_schedule_text}
@@ -757,7 +864,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                         })}
                       </View>
                       <TextInput 
-                        style={[styles.input, { marginTop: 6 }]} 
+                        style={[styles.input, { marginTop: 6, color: '#0F172A' }]} 
                         placeholder="Or type custom dosage (e.g. 10ml, 2 tabs)"
                         placeholderTextColor="#64748B"
                         value={med.dosage}
@@ -768,10 +875,17 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                         <View style={styles.col}>
                            <Text style={styles.label}>{t('Duration Type')}</Text>
                            <View style={styles.pickerContainer}>
-                             <Picker selectedValue={med.schedule_type} onValueChange={(val) => updateMedicineRow(index, 'schedule_type', val)}>
-                               <Picker.Item label={t("Daily")} value="daily" />
-                               <Picker.Item label={t("Weekly")} value="weekly" />
-                               <Picker.Item label={t("Monthly")} value="monthly" />
+                             <Picker 
+                               selectedValue={med.schedule_type} 
+                               onValueChange={(val) => updateMedicineRow(index, 'schedule_type', val)}
+                               style={styles.pickerStyle}
+                               dropdownIconColor="#0F172A"
+                             >
+                               <Picker.Item label={t("Daily")} value="daily" color="#0F172A" style={styles.pickerItemStyle} />
+                               <Picker.Item label={t("Weekly")} value="weekly" color="#0F172A" style={styles.pickerItemStyle} />
+                               <Picker.Item label={t("Monthly")} value="monthly" color="#0F172A" style={styles.pickerItemStyle} />
+                               <Picker.Item label={t("Alternate Days (Every 2 days)")} value="alternate_days" color="#0F172A" style={styles.pickerItemStyle} />
+                               <Picker.Item label={t("Every 3 Days")} value="every_3_days" color="#0F172A" style={styles.pickerItemStyle} />
                              </Picker>
                            </View>
                         </View>
@@ -784,7 +898,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                                  : t('Days Count')}
                            </Text>
                            <TextInput 
-                             style={styles.input} 
+                             style={[styles.input, { color: '#0F172A' }]} 
                              placeholderTextColor="#64748B"
                              value={med.duration_days}
                              onChangeText={(val) => updateMedicineRow(index, 'duration_days', val)}
@@ -797,33 +911,51 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                         <View style={styles.col}>
                            <Text style={styles.label}>{t('Food / Timing Instruction')}</Text>
                            <View style={styles.pickerContainer}>
-                             <Picker selectedValue={med.food_instruction} onValueChange={(val) => updateMedicineRow(index, 'food_instruction', val)}>
-                                <Picker.Item label={t("After Food")} value="After Food" />
-                                <Picker.Item label={t("Before Food")} value="Before Food" />
-                                <Picker.Item label={t("With Food")} value="With Food" />
-                                <Picker.Item label={t("Empty Stomach")} value="Empty Stomach" />
-                                <Picker.Item label={t("Specific Fixed Time")} value="Specific Fixed Time" />
+                             <Picker 
+                               selectedValue={med.food_instruction} 
+                               onValueChange={(val) => updateMedicineRow(index, 'food_instruction', val)}
+                               style={styles.pickerStyle}
+                               dropdownIconColor="#0F172A"
+                             >
+                                <Picker.Item label={t("After Food")} value="After Food" color="#0F172A" style={styles.pickerItemStyle} />
+                                <Picker.Item label={t("Before Food")} value="Before Food" color="#0F172A" style={styles.pickerItemStyle} />
+                                <Picker.Item label={t("With Food")} value="With Food" color="#0F172A" style={styles.pickerItemStyle} />
+                                <Picker.Item label={t("Empty Stomach")} value="Empty Stomach" color="#0F172A" style={styles.pickerItemStyle} />
+                                <Picker.Item label={t("Specific Fixed Time")} value="Specific Fixed Time" color="#0F172A" style={styles.pickerItemStyle} />
                              </Picker>
                            </View>
                         </View>
 
                         {med.food_instruction === 'Specific Fixed Time' ? (
                           <View style={styles.col}>
-                             <Text style={styles.label}>{t('Alarm Time (HH:MM)')}</Text>
-                             <TextInput 
-                               style={styles.input} 
-                               placeholder="e.g. 08:30" 
-                               placeholderTextColor="#64748B"
-                               value={med.custom_time}
-                               onChangeText={(val) => updateMedicineRow(index, 'custom_time', val)}
-                             />
+                             <Text style={styles.label}>{t('Specific Fixed Timings')}</Text>
+                             {Array.from({ length: requiredDoseCount }).map((_, tIdx) => (
+                               <TextInput 
+                                 key={tIdx}
+                                 style={[styles.input, { marginBottom: 6, color: '#0F172A' }]} 
+                                 placeholder={`Time #${tIdx + 1} (e.g. ${tIdx === 0 ? '08:00' : tIdx === 1 ? '20:00' : '14:00'})`} 
+                                 placeholderTextColor="#64748B"
+                                 value={(med.custom_times || [])[tIdx] || ''}
+                                 onChangeText={(val) => updateCustomTimeAtIndex(index, tIdx, val)}
+                               />
+                             ))}
                           </View>
                         ) : null}
                       </View>
 
-                      {med.food_instruction !== 'Specific Fixed Time' && (
+                      {med.food_instruction === 'Empty Stomach' && (
+                        <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginVertical: 8, borderWidth: 1, borderColor: '#F59E0B' }}>
+                          <Text style={{ color: '#92400E', fontSize: 13, fontWeight: '700' }}>
+                            ⚡ Empty Stomach automatically defaults to 07:30 AM (Before Breakfast).
+                          </Text>
+                        </View>
+                      )}
+
+                      {med.food_instruction !== 'Specific Fixed Time' && med.food_instruction !== 'Empty Stomach' && (
                         <View style={{ marginTop: 8 }}>
-                          <Text style={styles.label}>{t('Select Meal Timings / Routine Slots')}</Text>
+                          <Text style={styles.label}>
+                            {t('Select Meal Timings')} ({med.meal_slots.length}/{requiredDoseCount} selected)
+                          </Text>
                           <View style={styles.chipRow}>
                             {MEAL_SLOT_OPTIONS.map((slot) => {
                               const isSelected = (med.meal_slots || []).includes(slot);
@@ -843,7 +975,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                         </View>
                       )}
                   </View>
-               ))}
+                )})}
 
                <TouchableOpacity style={styles.addMedicineRowBtn} onPress={addMedicineRow}>
                   <Text style={styles.addMedicineRowBtnText}>+ {t('Add Another Medicine')}</Text>
@@ -869,7 +1001,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
               </View>
 
               <TextInput
-                style={[styles.input, { marginBottom: 0 }]}
+                style={[styles.input, { marginBottom: 0, color: '#0F172A' }]}
                 placeholder="Search stock by name or brand..."
                 placeholderTextColor="#64748B"
                 value={searchQuery}
@@ -930,27 +1062,57 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
         ) : editingMedicine ? (
            <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
              <View style={styles.formCard}>
-                <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                   <Text style={styles.sectionTitle}>{t('Edit')}</Text>
+                <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}}>
+                   <Text style={styles.sectionTitle}>{t('Edit Prescription Medicine')}</Text>
                    <TouchableOpacity onPress={() => setEditingMedicine(null)}>
-                      <Text style={{color: COLORS.primary}}>{t('Cancel')}</Text>
+                      <Text style={{color: COLORS.primary, fontWeight: '700'}}>{t('Cancel')}</Text>
                    </TouchableOpacity>
                 </View>
 
                 <Text style={styles.label}>{t('Medicine Name')}</Text>
-                <TextInput style={styles.input} placeholderTextColor="#64748B" value={editingMedicine.medicine_name} onChangeText={(val) => setEditingMedicine({...editingMedicine, medicine_name: val})} />
-
-                <Text style={styles.label}>{t('Dosage')}</Text>
-                <TextInput style={styles.input} placeholderTextColor="#64748B" value={editingMedicine.dosage} onChangeText={(val) => setEditingMedicine({...editingMedicine, dosage: val})} />
+                <TextInput style={[styles.input, { color: '#0F172A' }]} placeholderTextColor="#64748B" value={editingMedicine.medicine_name} onChangeText={(val) => setEditingMedicine({...editingMedicine, medicine_name: val})} />
 
                 <View style={styles.row}>
                   <View style={styles.col}>
-                     <Text style={styles.label}>{t('Schedule')}</Text>
+                    <Text style={styles.label}>{t('Medicine Form')}</Text>
+                    <View style={styles.pickerContainer}>
+                      <Picker 
+                        selectedValue={editingMedicine.medicine_form || 'Tablet'} 
+                        onValueChange={(val) => setEditingMedicine({...editingMedicine, medicine_form: val})}
+                        style={styles.pickerStyle}
+                        dropdownIconColor="#0F172A"
+                      >
+                        <Picker.Item label="Tablet 💊" value="Tablet" color="#0F172A" style={styles.pickerItemStyle} />
+                        <Picker.Item label="Capsule 💊" value="Capsule" color="#0F172A" style={styles.pickerItemStyle} />
+                        <Picker.Item label="Syrup 🧪" value="Syrup" color="#0F172A" style={styles.pickerItemStyle} />
+                        <Picker.Item label="Injection 💉" value="Injection" color="#0F172A" style={styles.pickerItemStyle} />
+                        <Picker.Item label="Ointment 🧴" value="Ointment" color="#0F172A" style={styles.pickerItemStyle} />
+                        <Picker.Item label="Drops 💧" value="Drops" color="#0F172A" style={styles.pickerItemStyle} />
+                      </Picker>
+                    </View>
+                  </View>
+
+                  <View style={styles.col}>
+                    <Text style={styles.label}>{t('Dosage')}</Text>
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholderTextColor="#64748B" value={editingMedicine.dosage} onChangeText={(val) => setEditingMedicine({...editingMedicine, dosage: val})} />
+                  </View>
+                </View>
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                     <Text style={styles.label}>{t('Schedule Type')}</Text>
                      <View style={styles.pickerContainer}>
-                       <Picker selectedValue={editingMedicine.schedule_type} onValueChange={(val) => setEditingMedicine({...editingMedicine, schedule_type: val})}>
-                         <Picker.Item label={t("Daily")} value="daily" />
-                         <Picker.Item label={t("Weekly")} value="weekly" />
-                         <Picker.Item label={t("Monthly")} value="monthly" />
+                       <Picker 
+                         selectedValue={editingMedicine.schedule_type} 
+                         onValueChange={(val) => setEditingMedicine({...editingMedicine, schedule_type: val})}
+                         style={styles.pickerStyle}
+                         dropdownIconColor="#0F172A"
+                       >
+                         <Picker.Item label={t("Daily")} value="daily" color="#0F172A" style={styles.pickerItemStyle} />
+                         <Picker.Item label={t("Weekly")} value="weekly" color="#0F172A" style={styles.pickerItemStyle} />
+                         <Picker.Item label={t("Monthly")} value="monthly" color="#0F172A" style={styles.pickerItemStyle} />
+                         <Picker.Item label={t("Alternate Days (Every 2 days)")} value="alternate_days" color="#0F172A" style={styles.pickerItemStyle} />
+                         <Picker.Item label={t("Every 3 Days")} value="every_3_days" color="#0F172A" style={styles.pickerItemStyle} />
                        </Picker>
                      </View>
                   </View>
@@ -962,7 +1124,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                             ? t('Months') 
                             : t('Days')}
                      </Text>
-                     <TextInput style={styles.input} placeholderTextColor="#64748B" value={editingMedicine.duration_days} onChangeText={(val) => setEditingMedicine({...editingMedicine, duration_days: val})} keyboardType="numeric" />
+                     <TextInput style={[styles.input, { color: '#0F172A' }]} placeholderTextColor="#64748B" value={editingMedicine.duration_days} onChangeText={(val) => setEditingMedicine({...editingMedicine, duration_days: val})} keyboardType="numeric" />
                   </View>
                 </View>
 
@@ -970,16 +1132,19 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                   <View style={styles.col}>
                      <Text style={styles.label}>{t('Food Instructions')}</Text>
                      <View style={styles.pickerContainer}>
-                       <Picker selectedValue={editingMedicine.food_instruction} onValueChange={(val) => setEditingMedicine({...editingMedicine, food_instruction: val})}>
-                          <Picker.Item label={t("Before Food")} value="Before Food" />
-                          <Picker.Item label={t("After Food")} value="After Food" />
-                          <Picker.Item label={t("Empty Stomach")} value="Empty Stomach" />
+                       <Picker 
+                         selectedValue={editingMedicine.food_instruction} 
+                         onValueChange={(val) => setEditingMedicine({...editingMedicine, food_instruction: val})}
+                         style={styles.pickerStyle}
+                         dropdownIconColor="#0F172A"
+                       >
+                          <Picker.Item label={t("After Food")} value="After Food" color="#0F172A" style={styles.pickerItemStyle} />
+                          <Picker.Item label={t("Before Food")} value="Before Food" color="#0F172A" style={styles.pickerItemStyle} />
+                          <Picker.Item label={t("With Food")} value="With Food" color="#0F172A" style={styles.pickerItemStyle} />
+                          <Picker.Item label={t("Empty Stomach")} value="Empty Stomach" color="#0F172A" style={styles.pickerItemStyle} />
+                          <Picker.Item label={t("Specific Fixed Time")} value="Specific Fixed Time" color="#0F172A" style={styles.pickerItemStyle} />
                        </Picker>
                      </View>
-                  </View>
-                  <View style={styles.col}>
-                     <Text style={styles.label}>{t('Alarm Time(HH:MM)')}</Text>
-                     <TextInput style={styles.input} placeholderTextColor="#64748B" value={editingMedicine.custom_times} onChangeText={(val) => setEditingMedicine({...editingMedicine, custom_times: val})} />
                   </View>
                 </View>
 
@@ -1038,7 +1203,6 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                             })`}
                           </Text>
 
-                          {/* Show Medicine Streak Button */}
                           <TouchableOpacity 
                             style={styles.showHistoryBtn}
                             onPress={() => setShowCalendarMed(item)}
@@ -1058,7 +1222,7 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                <Text style={styles.h3}>{t('Add Existing Patient')}</Text>
                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                   <TextInput 
-                    style={[styles.input, { flex: 1, marginBottom: 0 }]} 
+                    style={[styles.input, { flex: 1, marginBottom: 0, color: '#0F172A' }]} 
                     placeholder={t("Patient Phone No.")} 
                     placeholderTextColor="#64748B"
                     value={addPatientPhone}
@@ -1119,16 +1283,16 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                 automaticallyAdjustKeyboardInsets={true}
               >
                 <Text style={styles.label}>Medicine Name *</Text>
-                <TextInput style={styles.input} placeholder="e.g. Amoxicillin" placeholderTextColor="#64748B" value={itemForm.medicine_name} onChangeText={(val) => setItemForm({ ...itemForm, medicine_name: val })} />
+                <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="e.g. Amoxicillin" placeholderTextColor="#64748B" value={itemForm.medicine_name} onChangeText={(val) => setItemForm({ ...itemForm, medicine_name: val })} />
 
                 <View style={styles.row}>
                   <View style={styles.col}>
                     <Text style={styles.label}>Brand Name</Text>
-                    <TextInput style={styles.input} placeholder="e.g. Cipla / Sun" placeholderTextColor="#64748B" value={itemForm.brand_name} onChangeText={(val) => setItemForm({ ...itemForm, brand_name: val })} />
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="e.g. Cipla / Sun" placeholderTextColor="#64748B" value={itemForm.brand_name} onChangeText={(val) => setItemForm({ ...itemForm, brand_name: val })} />
                   </View>
                   <View style={styles.col}>
                     <Text style={styles.label}>Strength</Text>
-                    <TextInput style={styles.input} placeholder="e.g. 500mg" placeholderTextColor="#64748B" value={itemForm.strength} onChangeText={(val) => setItemForm({ ...itemForm, strength: val })} />
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="e.g. 500mg" placeholderTextColor="#64748B" value={itemForm.strength} onChangeText={(val) => setItemForm({ ...itemForm, strength: val })} />
                   </View>
                 </View>
 
@@ -1136,41 +1300,46 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                   <View style={styles.col}>
                     <Text style={styles.label}>Form</Text>
                     <View style={styles.pickerContainer}>
-                      <Picker selectedValue={itemForm.form} onValueChange={(val) => setItemForm({ ...itemForm, form: val })}>
-                        <Picker.Item label="Tablet" value="Tablet" />
-                        <Picker.Item label="Capsule" value="Capsule" />
-                        <Picker.Item label="Syrup" value="Syrup" />
-                        <Picker.Item label="Injection" value="Injection" />
-                        <Picker.Item label="Ointment" value="Ointment" />
-                        <Picker.Item label="Drops" value="Drops" />
+                      <Picker 
+                        selectedValue={itemForm.form} 
+                        onValueChange={(val) => setItemForm({ ...itemForm, form: val })}
+                        style={styles.pickerStyle}
+                        dropdownIconColor="#0F172A"
+                      >
+                        <Picker.Item label="Tablet" value="Tablet" color="#0F172A" style={styles.pickerItemStyle} />
+                        <Picker.Item label="Capsule" value="Capsule" color="#0F172A" style={styles.pickerItemStyle} />
+                        <Picker.Item label="Syrup" value="Syrup" color="#0F172A" style={styles.pickerItemStyle} />
+                        <Picker.Item label="Injection" value="Injection" color="#0F172A" style={styles.pickerItemStyle} />
+                        <Picker.Item label="Ointment" value="Ointment" color="#0F172A" style={styles.pickerItemStyle} />
+                        <Picker.Item label="Drops" value="Drops" color="#0F172A" style={styles.pickerItemStyle} />
                       </Picker>
                     </View>
                   </View>
                   <View style={styles.col}>
                     <Text style={styles.label}>Stock Qty *</Text>
-                    <TextInput style={styles.input} placeholder="e.g. 100" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.stock_quantity} onChangeText={(val) => setItemForm({ ...itemForm, stock_quantity: val })} />
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="e.g. 100" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.stock_quantity} onChangeText={(val) => setItemForm({ ...itemForm, stock_quantity: val })} />
                   </View>
                 </View>
 
                 <View style={styles.row}>
                   <View style={styles.col}>
                     <Text style={styles.label}>Batch Number</Text>
-                    <TextInput style={styles.input} placeholder="e.g. B-9982" placeholderTextColor="#64748B" value={itemForm.batch_number} onChangeText={(val) => setItemForm({ ...itemForm, batch_number: val })} />
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="e.g. B-9982" placeholderTextColor="#64748B" value={itemForm.batch_number} onChangeText={(val) => setItemForm({ ...itemForm, batch_number: val })} />
                   </View>
                   <View style={styles.col}>
                     <Text style={styles.label}>Expiry (YYYY-MM-DD)</Text>
-                    <TextInput style={styles.input} placeholder="2027-12-31" placeholderTextColor="#64748B" value={itemForm.expiry_date} onChangeText={(val) => setItemForm({ ...itemForm, expiry_date: val })} />
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="2027-12-31" placeholderTextColor="#64748B" value={itemForm.expiry_date} onChangeText={(val) => setItemForm({ ...itemForm, expiry_date: val })} />
                   </View>
                 </View>
 
                 <View style={styles.row}>
                   <View style={styles.col}>
                     <Text style={styles.label}>Reorder Level</Text>
-                    <TextInput style={styles.input} placeholder="10" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.reorder_level} onChangeText={(val) => setItemForm({ ...itemForm, reorder_level: val })} />
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="10" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.reorder_level} onChangeText={(val) => setItemForm({ ...itemForm, reorder_level: val })} />
                   </View>
                   <View style={styles.col}>
                     <Text style={styles.label}>Selling Price (₹)</Text>
-                    <TextInput style={styles.input} placeholder="45.00" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.selling_price} onChangeText={(val) => setItemForm({ ...itemForm, selling_price: val })} />
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="45.00" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.selling_price} onChangeText={(val) => setItemForm({ ...itemForm, selling_price: val })} />
                   </View>
                 </View>
 
@@ -1254,9 +1423,9 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
                 <Text style={styles.legendText}>{t('Future')}</Text>
               </View>
             </View>
-            
+
             <TouchableOpacity 
-              style={[styles.dismissButton, { backgroundColor: COLORS.border, marginTop: 20 }]} 
+              style={[styles.dismissButton, { backgroundColor: COLORS.border, marginTop: 16 }]} 
               onPress={() => setShowCalendarMed(null)}
             >
               <Text style={[styles.dismissText, { color: COLORS.text }]}>{t('Close')}</Text>
@@ -1274,17 +1443,15 @@ const MEAL_SLOT_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Bedtime'];
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: {
-    padding: 24,
+    padding: 20,
     paddingTop: 50,
     backgroundColor: COLORS.surface,
-    flexDirection: 'column',
     ...SHADOWS.small,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
     flexWrap: 'wrap',
     gap: 12
   },
@@ -1296,463 +1463,297 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   logoImage: {
-    width: 60,
-    height: 60,
+    width: 48,
+    height: 48,
     resizeMode: 'contain'
   },
-  greeting: { ...TYPOGRAPHY.h2, color: '#1A9988' }, 
+  greeting: { ...TYPOGRAPHY.h2, color: COLORS.text },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
   logoutBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: COLORS.error,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   logoutText: { color: COLORS.error, fontWeight: '600' },
   tabWrapper: {
-    paddingHorizontal: 16,
-    marginTop: 12,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
   tabContainer: {
+    paddingHorizontal: 20,
     flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
   },
   tab: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
+    paddingVertical: 14,
+    marginRight: 20,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
   },
-  activeTab: { backgroundColor: '#E6F4F1' },
-  tabText: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, fontWeight: '600' },
-  activeTabText: { color: '#1A9988' },
+  activeTab: { borderBottomColor: COLORS.primary },
+  tabText: { ...TYPOGRAPHY.button, color: COLORS.textSecondary },
+  activeTabText: { color: COLORS.primary },
   tabBadge: {
     backgroundColor: '#EF4444',
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 1,
   },
-  tabBadgeText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  content: { flex: 1, padding: 16 },
-  
+  tabBadgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
+  content: { flex: 1, padding: 20 },
   formCard: {
     backgroundColor: COLORS.surface,
     padding: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    ...SHADOWS.small,
+    borderRadius: 16,
+    ...SHADOWS.medium,
   },
-  sectionTitle: { ...TYPOGRAPHY.h3, marginBottom: 16, color: '#1A9988' },
-  label: { ...TYPOGRAPHY.caption, color: '#334155', marginBottom: 6, fontWeight: '700', fontSize: 13 },
+  sectionTitle: { ...TYPOGRAPHY.h2, color: COLORS.primary, marginBottom: 16 },
+  h3: { ...TYPOGRAPHY.h2, color: COLORS.text, marginBottom: 12 },
+  label: { fontSize: 13, fontWeight: '700', color: '#1E293B', marginBottom: 6 },
   input: {
-    backgroundColor: COLORS.inputBg,
-    paddingHorizontal: 14,
-    height: 48,
-    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1.5,
-    borderColor: COLORS.border,
-    ...TYPOGRAPHY.body,
-    fontSize: 14,
-    marginBottom: 14,
-    color: COLORS.text,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#0F172A',
+    marginBottom: 12,
   },
   pickerContainer: {
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1.5,
-    borderColor: COLORS.border,
-    marginBottom: 14,
-    height: 48,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    marginBottom: 12,
     justifyContent: 'center',
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
-  row: { 
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 2,
+  pickerStyle: {
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC',
+    width: '100%',
   },
+  pickerItemStyle: {
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC',
+    fontSize: 14,
+  },
+  row: { flexDirection: 'row', gap: 12 },
+  col: { flex: 1 },
+  medicineFormCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  medHeaderTitle: { fontSize: 15, fontWeight: '700', color: COLORS.primary },
+  removeBtn: { paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#FEE2E2', borderRadius: 6 },
+  removeBtnText: { color: '#DC2626', fontSize: 12, fontWeight: '700' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  chipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  chipText: { fontSize: 12, fontWeight: '600', color: '#475569' },
+  chipActiveText: { color: '#FFFFFF', fontWeight: '700' },
+  mealChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  mealChipActive: { backgroundColor: '#D1FAE5', borderColor: '#10B981' },
+  mealChipText: { fontSize: 12, fontWeight: '600', color: '#334155' },
+  mealChipActiveText: { color: '#047857', fontWeight: '700' },
+  addMedicineRowBtn: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addMedicineRowBtnText: { color: COLORS.primary, fontWeight: '700', fontSize: 14 },
   primaryButton: {
-    backgroundColor: '#1A9988',
+    backgroundColor: COLORS.primary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 8,
-    width: '100%',
+    justifyContent: 'center',
   },
   primaryButtonText: { ...TYPOGRAPHY.button },
-
-  // Inventory Styles
-  inventoryHeaderCard: {
-    backgroundColor: COLORS.surface,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    ...SHADOWS.small,
-  },
-  addStockBtn: {
-    backgroundColor: '#1A9988',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-  },
-  addStockBtnText: {
-    color: '#FFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  inventoryCard: {
-    backgroundColor: COLORS.surface,
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  inventoryCardLow: {
-    borderColor: '#EF4444',
-    backgroundColor: '#FEF2F2',
-  },
-  invName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  invSub: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  invDetails: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: 4,
-  },
-  invPrice: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.primary,
-    marginTop: 4,
-  },
-  stockQty: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#10B981',
-  },
-  lowBadge: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  lowBadgeText: {
-    color: '#DC2626',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  actionBtnSmall: {
-    backgroundColor: '#E6F4F1',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  actionBtnText: {
-    color: '#1A9988',
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  actionBtnEdit: {
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  actionBtnEditText: {
-    color: COLORS.textSecondary,
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  actionBtnDelete: {
-    backgroundColor: '#FEE2E2',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  actionBtnDeleteText: {
-    color: '#EF4444',
-    fontWeight: '700',
-    fontSize: 11,
-  },
-
-  // Autocomplete Suggestions
   suggestionsDropdown: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#1A9988',
-    marginTop: -12,
-    marginBottom: 16,
+    backgroundColor: '#FFF',
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    borderRadius: 10,
+    marginBottom: 12,
     padding: 8,
     ...SHADOWS.medium,
   },
-  suggestionHeader: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1A9988',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
+  suggestionHeader: { fontSize: 11, fontWeight: '700', color: '#64748B', marginBottom: 6 },
   suggestionItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justify.content: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
-  suggestionName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  suggestionSub: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  inStockBadge: {
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  inStockBadgeText: {
-    color: '#047857',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-
+  suggestionName: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  suggestionSub: { fontSize: 12, color: '#64748B' },
+  inStockBadge: { backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  inStockBadgeText: { color: '#047857', fontSize: 10, fontWeight: '700' },
   sourceBadge: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    alignItems: 'center',
   },
-  sourceInactive: {
-    backgroundColor: '#F8FAFC',
-    borderColor: COLORS.border,
-  },
-  sourceClinicActive: {
-    backgroundColor: '#D1FAE5',
-    borderColor: '#10B981',
-  },
-  sourceOutsideActive: {
-    backgroundColor: '#FFEDD5',
-    borderColor: '#F97316',
-  },
-  sourceText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
-  },
-  sourceClinicText: {
-    color: '#047857',
-  },
-  sourceOutsideText: {
-    color: '#C2410C',
-  },
-
-  // History & Patient Card Styles
-  showHistoryBtn: {
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginTop: 10,
-    alignItems: 'center',
-  },
-  showHistoryBtnText: {
-    color: COLORS.primary,
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  activeBadge: {
-    backgroundColor: '#E8F0FE',
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-  },
-  activeBadgeText: {
-    fontSize: 10,
-    color: '#1A73E8',
-    fontWeight: '700',
-  },
-  completedBadge: {
-    backgroundColor: COLORS.border,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-  },
-  completedBadgeText: {
-    fontSize: 10,
-    color: COLORS.textSecondary,
-    fontWeight: '700',
-  },
-
-  addPatientCard: {
+  sourceClinicActive: { backgroundColor: '#D1FAE5', borderColor: '#10B981' },
+  sourceOutsideActive: { backgroundColor: '#F3F4F6', borderColor: '#9CA3AF' },
+  sourceInactive: { backgroundColor: '#FAFAFA', borderColor: '#E5E7EB' },
+  sourceText: { fontSize: 11, fontWeight: '600', color: '#6B7280' },
+  sourceClinicText: { color: '#047857', fontWeight: '700' },
+  sourceOutsideText: { color: '#374151', fontWeight: '700' },
+  inventoryHeaderCard: {
     backgroundColor: COLORS.surface,
     padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#1A9988',
-  },
-  addButton: {
-    backgroundColor: '#1A9988',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  h3: { ...TYPOGRAPHY.h3, color: '#1A9988', marginBottom: 8 },
-  historyCard: {
-    backgroundColor: COLORS.surface,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  medName: { ...TYPOGRAPHY.h3, marginBottom: 4 },
-  medDetail: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
-  emptyText: { textAlign: 'center', marginTop: 40, color: COLORS.textSecondary },
-
-  medicineFormCard: {
-    backgroundColor: COLORS.surface,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: 16,
     marginBottom: 16,
     ...SHADOWS.small,
   },
-  medHeaderTitle: {
-    ...TYPOGRAPHY.h3,
-    color: '#1A9988',
-    fontWeight: 'bold',
-  },
-  removeBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: COLORS.error,
-    borderRadius: 6,
-  },
-  removeBtnText: {
-    color: COLORS.error,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  addMedicineRowBtn: {
-    paddingVertical: 12,
-    borderWidth: 2,
-    borderColor: '#1A9988',
-    borderStyle: 'dashed',
+  addStockBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 8,
-    alignItems: 'center',
+  },
+  addStockBtnText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  inventoryCard: {
+    backgroundColor: COLORS.surface,
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...SHADOWS.small,
+  },
+  inventoryCardLow: {
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+  },
+  invName: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+  invSub: { fontSize: 13, color: '#475569', marginTop: 2 },
+  invDetails: { fontSize: 12, color: '#64748B', marginTop: 4 },
+  invPrice: { fontSize: 13, fontWeight: '700', color: COLORS.primary, marginTop: 4 },
+  stockQty: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
+  lowBadge: { backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  lowBadgeText: { color: '#DC2626', fontSize: 10, fontWeight: '800' },
+  actionBtnSmall: { backgroundColor: '#E0F2FE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  actionBtnText: { color: COLORS.primary, fontSize: 11, fontWeight: '700' },
+  actionBtnEdit: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  actionBtnEditText: { color: '#475569', fontSize: 11, fontWeight: '700' },
+  actionBtnDelete: { backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  actionBtnDeleteText: { color: '#DC2626', fontSize: 11, fontWeight: '700' },
+  emptyText: { textAlign: 'center', marginTop: 40, color: COLORS.textSecondary, ...TYPOGRAPHY.body },
+  historyCard: {
+    backgroundColor: COLORS.surface,
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...SHADOWS.small,
+  },
+  medName: { ...TYPOGRAPHY.h2, color: COLORS.primary },
+  medDetail: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginTop: 4 },
+  completedBadge: { backgroundColor: '#E2E8F0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  completedBadgeText: { color: '#64748B', fontSize: 11, fontWeight: '700' },
+  activeBadge: { backgroundColor: '#E0F2FE', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  activeBadgeText: { color: COLORS.primary, fontSize: 11, fontWeight: '700' },
+  addPatientCard: {
+    backgroundColor: COLORS.surface,
+    padding: 16,
+    borderRadius: 16,
     marginBottom: 16,
+    ...SHADOWS.small,
   },
-  addMedicineRowBtnText: {
-    color: '#1A9988',
-    fontWeight: '700',
+  addButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
   },
   modalCenterWrapper: {
     width: '100%',
-    maxWidth: 380,
-    maxHeight: '90%',
-    justifyContent: 'center',
+    maxWidth: 440,
     alignItems: 'center',
   },
   inventoryModalCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 18,
+    padding: 20,
     width: '100%',
-    maxHeight: '100%',
+    maxHeight: '90%',
     ...SHADOWS.large,
   },
   modalHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
-    marginBottom: 14,
+    marginBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
     paddingBottom: 10,
   },
-  modalTitle: { 
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.primary 
-  },
-  modalSubTitle: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  closeBtnIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeBtnText: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    fontWeight: 'bold',
-  },
-  col: {
-    flex: 1,
-    flexShrink: 1,
-    minWidth: 0,
-  },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  modalSubTitle: { fontSize: 12, color: '#64748B' },
+  closeBtnIcon: { padding: 4 },
+  closeBtnText: { fontSize: 18, color: '#64748B', fontWeight: 'bold' },
   saveStockBtn: {
-    backgroundColor: '#1A9988',
+    backgroundColor: COLORS.primary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    marginBottom: 8,
-    width: '100%',
+    marginTop: 16,
   },
-  saveStockBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
+  saveStockBtnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
+  showHistoryBtn: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
   },
-
+  showHistoryBtnText: { color: '#334155', fontWeight: '600', fontSize: 12 },
   calendarModalContent: {
     backgroundColor: '#FFF',
     borderRadius: 20,
@@ -1762,16 +1763,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...SHADOWS.large
   },
-  calendarTitle: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.primary,
-  },
-  calendarSubTitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
+  calendarTitle: { ...TYPOGRAPHY.h2, color: COLORS.primary },
+  calendarSubTitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginBottom: 12, textAlign: 'center' },
   weekdayHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1781,19 +1774,8 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     paddingBottom: 4,
   },
-  weekdayLabel: {
-    width: '12%',
-    textAlign: 'center',
-    fontWeight: 'bold',
-    color: COLORS.textSecondary,
-    fontSize: 12,
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: '100%',
-    justifyContent: 'flex-start',
-  },
+  weekdayLabel: { width: '12%', textAlign: 'center', fontWeight: 'bold', color: COLORS.textSecondary, fontSize: 12 },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', justifyContent: 'flex-start' },
   calendarCell: {
     width: '12.2%',
     aspectRatio: 1,
@@ -1803,39 +1785,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
   },
-  calendarCellText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  cellTaken: {
-    backgroundColor: '#D1FAE5',
-    borderColor: '#10B981',
-  },
-  cellTakenText: {
-    color: '#047857',
-  },
-  cellMissed: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#EF4444',
-  },
-  cellMissedText: {
-    color: '#B91C1C',
-  },
-  cellFuture: {
-    backgroundColor: 'transparent',
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
-  },
-  cellFutureText: {
-    color: COLORS.textSecondary,
-  },
-  cellUnprescribed: {
-    backgroundColor: '#F1F5F9',
-    borderColor: '#E2E8F0',
-  },
-  cellUnprescribedText: {
-    color: '#94A3B8',
-  },
+  calendarCellText: { fontSize: 12, fontWeight: '600' },
+  cellTaken: { backgroundColor: '#D1FAE5', borderColor: '#10B981' },
+  cellTakenText: { color: '#047857' },
+  cellMissed: { backgroundColor: '#FEE2E2', borderColor: '#EF4444' },
+  cellMissedText: { color: '#B91C1C' },
+  cellFuture: { backgroundColor: 'transparent', borderColor: COLORS.border, borderStyle: 'dashed' },
+  cellFutureText: { color: COLORS.textSecondary },
+  cellUnprescribed: { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' },
+  cellUnprescribedText: { color: '#94A3B8' },
   legendContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1847,96 +1805,18 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
     paddingTop: 12,
   },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  legendText: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 1 },
+  legendText: { fontSize: 11, color: COLORS.textSecondary },
   dismissButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
+    paddingVertical: 12,
     borderRadius: 12,
-    marginTop: 24,
+    alignItems: 'center',
     width: '100%',
-    alignItems: 'center'
   },
   dismissText: { ...TYPOGRAPHY.button },
-  calendarStartCell: {
-    borderColor: '#F59E0B',
-    borderWidth: 2,
-  },
-  calendarStartCellText: {
-    fontWeight: '800',
-  },
-  
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 8,
-  },
-  chip: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    marginRight: 4,
-    marginBottom: 4,
-  },
-  chipActive: {
-    backgroundColor: '#E0F2FE',
-    borderColor: COLORS.primary,
-  },
-  chipText: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '500',
-  },
-  chipActiveText: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  mealChip: {
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    marginRight: 6,
-    marginBottom: 6,
-  },
-  mealChipActive: {
-    backgroundColor: '#059669',
-    borderColor: '#059669',
-  },
-  mealChipText: {
-    fontSize: 13,
-    color: '#334155',
-    fontWeight: '600',
-  },
-  mealChipActiveText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-
-  calendarStartStar: {
-    position: 'absolute',
-    bottom: -1,
-    fontSize: 8,
-    color: '#D97706',
-  },
+  calendarStartCell: { borderColor: '#F59E0B', borderWidth: 2 },
+  calendarStartCellText: { fontWeight: '800' },
+  calendarStartStar: { position: 'absolute', bottom: -1, fontSize: 8, color: '#D97706' },
 });

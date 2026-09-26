@@ -16,7 +16,6 @@ try {
   console.log("Notification loader note:", e.message);
 }
 
-// Safe Audio loader for SDK 57 compatibility
 let createAudioPlayer = null;
 try {
   const expoAudio = require('expo-audio');
@@ -120,7 +119,6 @@ export default function PatientDashboard() {
     }
   };
 
-  // Listen for user tapping "✓ OK, I've Taken" from Notification or Lock Screen
   useEffect(() => {
     if (!Notifications) return;
 
@@ -147,7 +145,11 @@ export default function PatientDashboard() {
 
   const calculateAlarmTimesForMed = (med) => {
     if (med.food_instruction === 'Specific Fixed Time' && med.custom_times && med.custom_times.length > 0) {
-      return med.custom_times;
+      return med.custom_times.map(t => t.substring(0, 5));
+    }
+
+    if (med.food_instruction === 'Empty Stomach') {
+      return ['07:30'];
     }
 
     const slots = Array.isArray(med.meal_slots) && med.meal_slots.length > 0 ? med.meal_slots : ['Breakfast'];
@@ -181,7 +183,7 @@ export default function PatientDashboard() {
 
   const playSound = async (medItems) => {
     try {
-       await stopSound(); // Stop any currently playing audio
+       await stopSound();
 
        const soundSource = routine.ringtone_uri && routine.ringtone_uri !== 'default' 
          ? routine.ringtone_uri 
@@ -198,7 +200,6 @@ export default function PatientDashboard() {
           }
        }
 
-       // Text To Speech Loop (reads out all matching medicines)
        const medNamesStr = medItems.map(m => m.medicine_name).join(', ');
        const textToSpeak = `${t('Medication Time!')} ${t('Take:')} ${medNamesStr}`;
        const lang = i18n.language === 'en' ? 'en-IN' : `${i18n.language}-IN`;
@@ -246,7 +247,7 @@ export default function PatientDashboard() {
        }
     }
     setActiveAlarms([]);
-    fetchMedicines(); // Refresh streak counts and visual status
+    fetchMedicines();
   };
 
   useEffect(() => {
@@ -260,9 +261,13 @@ export default function PatientDashboard() {
     const start = new Date(item.start_date);
     let totalDays = item.duration_days || 7;
     if (item.schedule_type === 'weekly') {
-      totalDays = item.duration_days * 7;
+      totalDays = (item.duration_days || 1) * 7;
     } else if (item.schedule_type === 'monthly') {
-      totalDays = item.duration_days * 30;
+      totalDays = (item.duration_days || 1) * 30;
+    } else if (item.schedule_type === 'alternate_days') {
+      totalDays = (item.duration_days || 1) * 2;
+    } else if (item.schedule_type === 'every_3_days') {
+      totalDays = (item.duration_days || 1) * 3;
     }
     return new Date(start.getTime() + totalDays * 24 * 60 * 60 * 1000);
   };
@@ -272,6 +277,41 @@ export default function PatientDashboard() {
     const now = new Date();
     const end = getEndPeriodDate(item);
     return now > end;
+  };
+
+  const isAlarmDueToday = (med) => {
+    if (!med.start_date) return true;
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    
+    const start = new Date(med.start_date);
+    start.setHours(0,0,0,0);
+
+    // If start date is in the future, alarm is NOT due today
+    if (today < start) return false;
+
+    const diffDays = Math.floor((today.getTime() - start.getTime()) / (1000 * 3600 * 24));
+    const st = (med.schedule_type || 'daily').toLowerCase();
+
+    if (st === 'daily') {
+      return diffDays < (med.duration_days || 7);
+    } else if (st === 'weekly') {
+      const isSameWeekday = today.getDay() === start.getDay();
+      const weeksPassed = Math.floor(diffDays / 7);
+      return isSameWeekday && weeksPassed < (med.duration_days || 4);
+    } else if (st === 'monthly') {
+      const isSameDayOfMonth = today.getDate() === start.getDate();
+      const monthsPassed = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+      return isSameDayOfMonth && monthsPassed < (med.duration_days || 3);
+    } else if (st === 'alternate_days' || st === 'alternate days') {
+      const isEvery2nd = diffDays % 2 === 0;
+      return isEvery2nd && diffDays < ((med.duration_days || 7) * 2);
+    } else if (st === 'every_3_days' || st === 'every 3 days') {
+      const isEvery3rd = diffDays % 3 === 0;
+      return isEvery3rd && diffDays < ((med.duration_days || 7) * 3);
+    }
+
+    return diffDays < (med.duration_days || 7);
   };
 
   const getLocalDateString = (date) => {
@@ -381,6 +421,7 @@ export default function PatientDashboard() {
       
       const triggeredMeds = medicines.filter(med => {
          if (isMedicineCompleted(med)) return false;
+         if (!isAlarmDueToday(med)) return false;
          const alarmTimes = calculateAlarmTimesForMed(med);
          return alarmTimes.some((t) => t.startsWith(currentHHMM));
       });
@@ -395,28 +436,14 @@ export default function PatientDashboard() {
     return () => clearInterval(interval);
   }, [medicines, lastAlarmTime, routine]);
 
-  async function requestNotificationPermissions() {
-    if (!Notifications) return false;
-    try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      return finalStatus === 'granted';
-    } catch (err) {
-      console.log('Notification permission note:', err.message);
-      return false;
-    }
-  }
-
   const scheduleAllNotifications = async (medList) => {
     if (!Notifications) return;
     try {
       await Notifications.cancelAllScheduledNotificationsAsync();
       for (const med of medList) {
         if (isMedicineCompleted(med)) continue;
+        if (!isAlarmDueToday(med)) continue;
+
         const alarmTimes = calculateAlarmTimesForMed(med);
         if (!alarmTimes || alarmTimes.length === 0) continue;
         
@@ -430,11 +457,11 @@ export default function PatientDashboard() {
           if (med.schedule_type === 'daily') {
             trigger = { hour, minute, repeats: true };
           } else if (med.schedule_type === 'weekly') {
-            const startDate = new Date(med.start_date);
+            const startDate = new Date(med.start_date || Date.now());
             const weekday = startDate.getDay() + 1;
             trigger = { weekday, hour, minute, repeats: true };
           } else {
-            const startDate = new Date(med.start_date);
+            const startDate = new Date(med.start_date || Date.now());
             const day = startDate.getDate();
             trigger = { day, hour, minute, repeats: true };
           }
@@ -521,166 +548,83 @@ export default function PatientDashboard() {
     }
   };
 
-  const pickAndUploadLabReport = async () => {
+  const handleUploadLabReport = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/jpeg', 'image/png'],
+        type: ['application/pdf', 'image/*'],
         copyToCacheDirectory: true,
       });
 
-      if (result.canceled) return;
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
 
-      const fileToUpload = result.assets[0];
+      const file = result.assets[0];
       setUploadingLab(true);
       setLabSummary(null);
 
       const formData = new FormData();
-      if (Platform.OS === 'web') {
-        formData.append('file', fileToUpload.file);
-      } else {
-        formData.append('file', {
-          uri: fileToUpload.uri,
-          type: fileToUpload.mimeType || 'application/pdf',
-          name: fileToUpload.name,
-        });
-      }
-      
-      formData.append('lang', i18n.language);
-
-      const response = await axios.post(`${API_URL}/labs/upload`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      formData.append('report', {
+        uri: Platform.OS === 'android' ? file.uri : file.uri.replace('file://', ''),
+        name: file.name || 'report.pdf',
+        type: file.mimeType || 'application/pdf',
       });
 
-      setLabSummary(response.data);
-    } catch (e) {
-      alert("Failed to upload or parse report: " + (e.response?.data?.error || e.message));
+      const res = await axios.post(`${API_URL}/lab/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      setLabSummary(res.data);
+    } catch (err) {
+      alert('Failed to process lab report: ' + (err.response?.data?.message || err.message));
     } finally {
       setUploadingLab(false);
     }
   };
 
-  const renderMedicine = ({ item }) => {
-    const completed = isMedicineCompleted(item);
-    const startDateFormatted = formatDisplayDate(item.start_date);
-    const endDateFormatted = formatDisplayDate(getEndPeriodDate(item));
-    const isClinicSource = item.availability_source === 'clinic_pharmacy';
-    const computedAlarmTimes = calculateAlarmTimesForMed(item);
-
-    return (
-      <View style={[styles.card, completed && styles.cardCompleted]}>
-        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
-           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
-             <Text style={styles.medName}>{item.medicine_name}</Text>
-             {isClinicSource ? (
-               <View style={styles.clinicBadge}>
-                 <Text style={styles.clinicBadgeText}>Available at Clinic Pharmacy</Text>
-               </View>
-             ) : (
-               <View style={styles.outsideBadge}>
-                 <Text style={styles.outsideBadgeText}>Buy Outside</Text>
-               </View>
-             )}
-           </View>
-
-           {completed ? (
-              <View style={styles.completedBadge}>
-                 <Text style={styles.completedBadgeText}>{t('Completed')}</Text>
-              </View>
-           ) : (
-              <View style={styles.activeBadge}>
-                 <Text style={styles.activeBadgeText}>{t('Active')}</Text>
-              </View>
-           )}
-        </View>
-
-        <Text style={styles.medDetail}>{t('Dosage: ')}<Text style={{ fontWeight: '700', color: COLORS.text }}>{item.dosage}</Text></Text>
-        <Text style={styles.medDetail}>
-          {t('Schedule: ')}
-          <Text style={{ fontWeight: '700', color: COLORS.text }}>
-            {item.custom_schedule_text || (item.schedule_type ? t(item.schedule_type.toLowerCase()) : '')}
-            {` (for ${item.duration_days} ${
-              item.schedule_type === 'weekly' 
-                ? t('Weeks') 
-                : item.schedule_type === 'monthly' 
-                  ? t('Months') 
-                  : t('Days')
-            })`}
-          </Text>
-        </Text>
-        <Text style={styles.medDetail}>{t('Food / Instruction: ')}<Text style={{ fontWeight: '700', color: COLORS.text }}>{item.food_instruction ? t(item.food_instruction) : ''}</Text></Text>
-        <Text style={styles.medDetail}>⏰ {t('Calculated Alarm Times: ')}<Text style={{ fontWeight: '700', color: COLORS.primary }}>{computedAlarmTimes.join(', ')}</Text></Text>
-        
-        {/* Date Ranges */}
-        <View style={styles.dateRangeBox}>
-           <Text style={styles.dateRangeText}>📅 Started On: <Text style={{ fontWeight: '700', color: COLORS.text }}>{startDateFormatted}</Text></Text>
-           <Text style={styles.dateRangeText}>🏁 Ending On: <Text style={{ fontWeight: '700', color: COLORS.text }}>{endDateFormatted}</Text></Text>
-        </View>
-
-        {item.instructions && <Text style={[styles.medDetail, { marginTop: 4 }]}>{t('Note: ')}{item.instructions}</Text>}
-
-        {/* Medicine History Button */}
-        <TouchableOpacity 
-          style={styles.showHistoryBtn}
-          onPress={() => setShowCalendarMed(item)}
-        >
-          <Text style={styles.showHistoryBtnText}>📅 Show Medicine History / Streak</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
   const renderFormattedText = (text) => {
     if (!text) return null;
-    const lines = text.split('\n');
+    const lines = text.split('
+');
+    return lines.map((line, index) => {
+      const cleanLine = line.replace(/\*\*/g, '').trim();
+      if (!cleanLine) return null;
 
-    return (
-      <View>
-        {lines.map((line, lineIdx) => {
-          const trimmed = line.trim();
-          if (!trimmed) {
-            return <View key={lineIdx} style={{ height: 6 }} />;
-          }
-
-          const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ');
-          const cleanLine = isBullet ? trimmed.replace(/^[-•*]\s*/, '') : trimmed;
-
-          return (
-            <Text key={lineIdx} style={[styles.summaryText, { marginBottom: isBullet ? 6 : 4 }]}>
-              {isBullet && <Text style={{ fontWeight: '700', color: COLORS.primary }}>• </Text>}
-              {cleanLine}
-            </Text>
-          );
-        })}
-      </View>
-    );
+      if (line.startsWith('###') || line.startsWith('**') && line.endsWith('**')) {
+        return <Text key={index} style={{ fontSize: 16, fontWeight: 'bold', color: COLORS.primary, marginTop: 12, marginBottom: 4 }}>{cleanLine}</Text>;
+      } else if (line.trim().startsWith('-') || line.trim().startsWith('*')) {
+        return (
+          <View key={index} style={{ flexDirection: 'row', alignItems: 'flex-start', marginVertical: 2, paddingLeft: 8 }}>
+            <Text style={{ fontSize: 14, color: COLORS.text, marginRight: 6 }}>•</Text>
+            <Text style={{ fontSize: 14, color: COLORS.text, flex: 1, lineHeight: 20 }}>{cleanLine.substring(1).trim()}</Text>
+          </View>
+        );
+      } else {
+        return <Text key={index} style={{ fontSize: 14, color: COLORS.text, marginVertical: 3, lineHeight: 20 }}>{cleanLine}</Text>;
+      }
+    });
   };
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-         <View style={styles.headerTop}>
-           <View style={styles.brandRow}>
+        <View style={styles.headerTop}>
+          <View style={styles.brandRow}>
              <Image source={require('../../assets/icon.png')} style={styles.logoImage} />
              <View style={{ flexShrink: 1 }}>
-               <Text style={[styles.subtitle, { color: COLORS.primary, fontWeight: 'bold' }]}>
-                 {t('Patient Name:')} {userInfo?.name}
-               </Text>
-               <Text style={styles.subtitle}>{t('Patient ID:')} {userInfo?.id}</Text>
+               <Text style={TYPOGRAPHY.h2}>{t('Welcome,')} {userInfo?.name}</Text>
+               <Text style={styles.subtitle}>{t('Patient Health Space')}</Text>
              </View>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <TouchableOpacity style={styles.settingsBtn} onPress={() => setSettingsModalVisible(true)}>
-              <Text style={styles.settingsBtnText}>⚙️ Routine & Ringtone</Text>
+              <Text style={styles.settingsBtnText}>⚙️ Routine</Text>
             </TouchableOpacity>
             <LanguageButton onPress={() => setLangModalVisible(true)} />
             <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
               <Text style={styles.logoutText}>{t('Logout')}</Text>
             </TouchableOpacity>
           </View>
-         </View>
+        </View>
       </View>
 
       {/* Tabs */}
@@ -689,52 +633,109 @@ export default function PatientDashboard() {
           style={[styles.tab, tab === 'prescriptions' && styles.activeTab]}
           onPress={() => setTab('prescriptions')}
         >
-          <Text style={[styles.tabText, tab === 'prescriptions' && styles.activeTabText]}>{t('My Prescriptions')}</Text>
+          <Text style={[styles.tabText, tab === 'prescriptions' && styles.activeTabText]}>{t('My Medications')}</Text>
         </TouchableOpacity>
+        
         <TouchableOpacity 
           style={[styles.tab, tab === 'labs' && styles.activeTab]}
           onPress={() => setTab('labs')}
         >
-          <Text style={[styles.tabText, tab === 'labs' && styles.activeTabText]}>{t('Lab Reports')}</Text>
+          <Text style={[styles.tabText, tab === 'labs' && styles.activeTabText]}>{t('AI Lab Analyzer')}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
+      {/* Tab Content */}
       <View style={styles.content}>
         {tab === 'prescriptions' ? (
           loadingMeds ? (
-            <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
+            <ActivityIndicator size="large" color="#1A9988" style={{ marginTop: 40 }} />
           ) : (
             <FlatList
               data={medicines}
               keyExtractor={(item) => item.id.toString()}
-              renderItem={renderMedicine}
-              contentContainerStyle={{ paddingBottom: 20 }}
-              ListEmptyComponent={<Text style={styles.emptyText}>{t('No active prescriptions.')}</Text>}
+              renderItem={({ item }) => {
+                const completed = isMedicineCompleted(item);
+                const isClinicPharmacy = item.availability_source === 'clinic_pharmacy';
+                const alarmTimes = calculateAlarmTimesForMed(item);
+                const isTodayDue = isAlarmDueToday(item);
+
+                return (
+                  <View style={[styles.card, completed && styles.cardCompleted]}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6 }}>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <Text style={styles.medName}>{item.medicine_name}</Text>
+                          {isClinicPharmacy ? (
+                            <View style={styles.clinicBadge}>
+                              <Text style={styles.clinicBadgeText}>✓ Clinic Inventory Stock</Text>
+                            </View>
+                          ) : (
+                            <View style={styles.outsideBadge}>
+                              <Text style={styles.outsideBadgeText}>🛒 Buy Outside</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.medDetail}>{item.dosage} • {item.medicine_form || 'Tablet'}</Text>
+                      </View>
+
+                      {completed ? (
+                        <View style={styles.completedBadge}>
+                          <Text style={styles.completedBadgeText}>{t('Completed')}</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.activeBadge}>
+                          <Text style={styles.activeBadgeText}>{t('Active')}</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.dateRangeBox}>
+                      <Text style={styles.dateRangeText}>
+                        🗓️ <Text style={{ fontWeight: '700' }}>Schedule:</Text> {item.schedule_type ? t(item.schedule_type.toLowerCase()) : 'daily'} ({item.duration_days || 7} days)
+                      </Text>
+                      <Text style={styles.dateRangeText}>
+                        ⏰ <Text style={{ fontWeight: '700' }}>Alarm Times:</Text> {alarmTimes.join(', ')}
+                      </Text>
+                      <Text style={styles.dateRangeText}>
+                        🍽️ <Text style={{ fontWeight: '700' }}>Instruction:</Text> {item.food_instruction ? t(item.food_instruction) : 'After Food'}
+                      </Text>
+                      <Text style={styles.dateRangeText}>
+                        🚀 <Text style={{ fontWeight: '700' }}>Starts:</Text> {formatDisplayDate(item.start_date || new Date())} {isTodayDue ? ' (Fires Today 🔔)' : ' (Starts Later)'}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity 
+                      style={styles.showHistoryBtn}
+                      onPress={() => setShowCalendarMed(item)}
+                    >
+                      <Text style={styles.showHistoryBtnText}>📅 {t('View History & Streak Calendar')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }}
+              ListEmptyComponent={<Text style={styles.emptyText}>{t('No prescribed medications found.')}</Text>}
             />
           )
         ) : (
-          <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+          <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.uploadSection}>
-              <Text style={styles.sectionTitle}>{t('Understand Your Lab Report')}</Text>
-              <Text style={styles.sectionSubtitle}>{t('Upload a PDF or Image of your lab report, and our AI will translate it into simple language.')}</Text>
-              
-              <TouchableOpacity 
-                style={styles.primaryButton}
-                onPress={pickAndUploadLabReport}
-                disabled={uploadingLab}
-              >
+              <Text style={styles.sectionTitle}>🧪 {t('AI Medical Report Analyzer')}</Text>
+              <Text style={styles.sectionSubtitle}>
+                {t('Upload your lab results (PDF or Image) to get instant patient-friendly explanations in your preferred language.')}
+              </Text>
+
+              <TouchableOpacity style={styles.primaryButton} onPress={handleUploadLabReport} disabled={uploadingLab}>
                 {uploadingLab ? (
-                   <ActivityIndicator color="#FFF" />
+                  <ActivityIndicator color="#FFF" />
                 ) : (
-                   <Text style={styles.primaryButtonText}>{t('Upload Report')}</Text>
+                  <Text style={styles.primaryButtonText}>📄 {t('Upload Lab Report (PDF/Image)')}</Text>
                 )}
               </TouchableOpacity>
             </View>
 
             {labSummary && (
               <View style={styles.summaryContainer}>
-                <Text style={styles.successTitle}>{t('AI Summary Completed')}</Text>
+                <Text style={styles.successTitle}>✓ {t('Report Analyzed')}</Text>
                 
                 <View style={styles.summaryBox}>
                   {renderFormattedText(labSummary.summary)}
@@ -771,57 +772,62 @@ export default function PatientDashboard() {
         </View>
       </Modal>
 
-      {/* Initial Routine Onboarding Modal */}
+      {/* Initial Routine Onboarding Modal (Properly styled white card) */}
       <Modal visible={onboardingModalVisible} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.routineModalContent}>
-            <Text style={styles.routineModalTitle}>Welcome! Set Your Daily Routine ☀️</Text>
-            <Text style={styles.routineModalSub}>Please set your usual meal times so MedTrack can schedule your medication alarms accurately.</Text>
+          <View style={styles.routineModalCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.routineModalTitle}>Welcome! Set Your Daily Routine ☀️</Text>
+            </View>
 
-            <Text style={styles.routineLabel}>Breakfast Time (HH:MM)</Text>
-            <TextInput 
-              style={styles.routineInput} 
-              value={routine.breakfast_time} 
-              onChangeText={(val) => setRoutine({ ...routine, breakfast_time: val })} 
-              placeholder="08:00" 
-              placeholderTextColor="#64748B"
-            />
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+              <Text style={styles.routineModalSub}>Please set your usual meal times so MedTrack can schedule your medication alarms accurately.</Text>
 
-            <Text style={styles.routineLabel}>Lunch Time (HH:MM)</Text>
-            <TextInput 
-              style={styles.routineInput} 
-              value={routine.lunch_time} 
-              onChangeText={(val) => setRoutine({ ...routine, lunch_time: val })} 
-              placeholder="13:30" 
-              placeholderTextColor="#64748B"
-            />
+              <Text style={styles.routineLabel}>Breakfast Time (HH:MM)</Text>
+              <TextInput 
+                style={styles.routineInput} 
+                value={routine.breakfast_time} 
+                onChangeText={(val) => setRoutine({ ...routine, breakfast_time: val })} 
+                placeholder="08:00" 
+                placeholderTextColor="#64748B"
+              />
 
-            <Text style={styles.routineLabel}>Dinner Time (HH:MM)</Text>
-            <TextInput 
-              style={styles.routineInput} 
-              value={routine.dinner_time} 
-              onChangeText={(val) => setRoutine({ ...routine, dinner_time: val })} 
-              placeholder="20:30" 
-              placeholderTextColor="#64748B"
-            />
+              <Text style={styles.routineLabel}>Lunch Time (HH:MM)</Text>
+              <TextInput 
+                style={styles.routineInput} 
+                value={routine.lunch_time} 
+                onChangeText={(val) => setRoutine({ ...routine, lunch_time: val })} 
+                placeholder="13:30" 
+                placeholderTextColor="#64748B"
+              />
 
-            <Text style={styles.routineLabel}>Bedtime (HH:MM)</Text>
-            <TextInput 
-              style={styles.routineInput} 
-              value={routine.bedtime} 
-              onChangeText={(val) => setRoutine({ ...routine, bedtime: val })} 
-              placeholder="22:00" 
-              placeholderTextColor="#64748B"
-            />
+              <Text style={styles.routineLabel}>Dinner Time (HH:MM)</Text>
+              <TextInput 
+                style={styles.routineInput} 
+                value={routine.dinner_time} 
+                onChangeText={(val) => setRoutine({ ...routine, dinner_time: val })} 
+                placeholder="20:30" 
+                placeholderTextColor="#64748B"
+              />
 
-            <TouchableOpacity style={styles.saveRoutineBtn} onPress={() => handleSaveRoutine(true)} disabled={savingRoutine}>
-              {savingRoutine ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveRoutineBtnText}>Save & Get Started</Text>}
-            </TouchableOpacity>
+              <Text style={styles.routineLabel}>Bedtime (HH:MM)</Text>
+              <TextInput 
+                style={styles.routineInput} 
+                value={routine.bedtime} 
+                onChangeText={(val) => setRoutine({ ...routine, bedtime: val })} 
+                placeholder="22:00" 
+                placeholderTextColor="#64748B"
+              />
+
+              <TouchableOpacity style={styles.saveRoutineBtn} onPress={() => handleSaveRoutine(true)} disabled={savingRoutine}>
+                {savingRoutine ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveRoutineBtnText}>Save & Get Started</Text>}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Routine & Settings Modal (Properly Aligned Card Layout) */}
+      {/* Routine & Settings Modal */}
       <Modal visible={settingsModalVisible} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.routineModalCard}>
@@ -1014,8 +1020,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   logoImage: {
-    width: 50,
-    height: 50,
+    width: 48,
+    height: 48,
     resizeMode: 'contain'
   },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },

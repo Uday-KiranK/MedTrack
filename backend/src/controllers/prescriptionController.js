@@ -11,13 +11,20 @@ const {
 
 exports.createPrescription = async (req, res) => {
   try {
-    const { patientId, medicines } = req.body;
+    const { patientId, medicines, startDateOption, customStartDate } = req.body;
 
     if (!patientId || !Array.isArray(medicines)) {
       return res.status(400).json({ message: "Invalid data" });
     }
 
-    const prescription = await createPrescription(req.user.id, patientId);
+    let startDate = new Date();
+    if (startDateOption === 'Tomorrow') {
+      startDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    } else if (startDateOption === 'Custom' && customStartDate) {
+      startDate = new Date(customStartDate);
+    }
+
+    const prescription = await createPrescription(req.user.id, patientId, startDate);
 
     for (const med of medicines) {
       let dosageQty = 1;

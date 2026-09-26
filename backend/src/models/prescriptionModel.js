@@ -1,9 +1,9 @@
 const pool = require("../utils/db");
 
-const createPrescription = async (doctorId, patientId) => {
+const createPrescription = async (doctorId, patientId, startDate = null) => {
   const res = await pool.query(
-    "INSERT INTO prescriptions (doctor_id, patient_id) VALUES ($1,$2) RETURNING *",
-    [doctorId, patientId]
+    "INSERT INTO prescriptions (doctor_id, patient_id, created_at) VALUES ($1,$2, COALESCE($3, NOW())) RETURNING *",
+    [doctorId, patientId, startDate]
   );
   return res.rows[0];
 };

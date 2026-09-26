@@ -14,7 +14,7 @@
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#1A9988"
+        "backgroundColor": "#FFFFFF"
       },
       "permissions": [
         "NOTIFICATIONS",
