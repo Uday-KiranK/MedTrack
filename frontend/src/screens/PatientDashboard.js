@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, ScrollView, Platform, Modal, Image, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, ScrollView, Platform, Modal, Image, TextInput, Alert, Linking, AppState } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTranslation } from 'react-i18next';
 import * as Speech from 'expo-speech';
@@ -34,6 +34,9 @@ export default function PatientDashboard() {
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [onboardingModalVisible, setOnboardingModalVisible] = useState(false);
   
+  // Permission state
+  const [hasNotificationPermission, setHasNotificationPermission] = useState(true);
+
   // Prescriptions state
   const [medicines, setMedicines] = useState([]);
   const [loadingMeds, setLoadingMeds] = useState(false);
@@ -65,12 +68,22 @@ export default function PatientDashboard() {
 
   useEffect(() => {
     setupNotifications();
-    requestNotificationPermissions();
+    checkPermissions();
     fetchMedicines();
     loadCustomRingtoneName();
     if (userInfo && userInfo.routine_configured === false) {
       setOnboardingModalVisible(true);
     }
+
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active') {
+        checkPermissions();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   const loadCustomRingtoneName = async () => {
@@ -123,27 +136,61 @@ export default function PatientDashboard() {
     }
   };
 
-  async function requestNotificationPermissions() {
-    if (!Notifications) return false;
-    try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      return finalStatus === 'granted';
-    } catch (err) {
-      console.log('Notification permission note:', err.message);
+  const checkPermissions = async () => {
+    if (!Notifications) {
+      setHasNotificationPermission(false);
       return false;
     }
-  }
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      const granted = status === 'granted';
+      setHasNotificationPermission(granted);
+      return granted;
+    } catch (err) {
+      setHasNotificationPermission(false);
+      return false;
+    }
+  };
+
+  const handleEnablePermissions = async () => {
+    if (!Notifications) return;
+    try {
+      const { status: reqStatus } = await Notifications.requestPermissionsAsync();
+      if (reqStatus === 'granted') {
+        setHasNotificationPermission(true);
+        Alert.alert("✓ Success", "Alarm permissions granted! Medication alarms will now ring even when your app is closed or phone is locked.");
+        fetchMedicines();
+      } else {
+        setHasNotificationPermission(false);
+        handleOpenSettings();
+      }
+    } catch (e) {
+      console.log('Error requesting permissions', e);
+    }
+  };
+
+  const handleOpenSettings = () => {
+    Alert.alert(
+      'Android Settings Check ⚙️',
+      'For guaranteed exact alarms when screen is locked or app is closed:\n\n1. Ensure "Notifications" is ALLOWED.\n2. In Special App Access, ensure "Alarms & Reminders" is ON.\n3. Set Battery Usage to "Unrestricted".',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Open System Settings ⚙️', 
+          onPress: () => {
+            if (Linking.openSettings) {
+              Linking.openSettings();
+            }
+          } 
+        }
+      ]
+    );
+  };
 
   useEffect(() => {
     if (!Notifications) return;
 
     const responseListener = Notifications.addNotificationResponseReceivedListener(async (response) => {
-      const actionId = response.actionIdentifier;
       const medicineId = response.notification.request.content.data?.medicineId;
       
       await stopSound();
@@ -186,7 +233,6 @@ export default function PatientDashboard() {
       let h = parseInt(hStr, 10) || 8;
       let m = parseInt(mStr, 10) || 0;
 
-      // Adjusted to ~10 min offset as requested by user
       if (med.food_instruction === 'After Food') {
         m += 10;
         if (m >= 60) { h = (h + 1) % 24; m -= 60; }
@@ -300,28 +346,28 @@ export default function PatientDashboard() {
     return now > end;
   };
 
-  const isAlarmDueToday = (med) => {
+  const isMedicationDueOnDate = (med, targetDate) => {
     if (!med.start_date) return true;
-    const today = new Date();
-    today.setHours(0,0,0,0);
+    const target = new Date(targetDate);
+    target.setHours(0,0,0,0);
     
     const start = new Date(med.start_date);
     start.setHours(0,0,0,0);
 
-    if (today < start) return false;
+    if (target < start) return false;
 
-    const diffDays = Math.floor((today.getTime() - start.getTime()) / (1000 * 3600 * 24));
+    const diffDays = Math.floor((target.getTime() - start.getTime()) / (1000 * 3600 * 24));
     const st = (med.schedule_type || 'daily').toLowerCase();
 
     if (st === 'daily') {
       return diffDays < (med.duration_days || 7);
     } else if (st === 'weekly') {
-      const isSameWeekday = today.getDay() === start.getDay();
+      const isSameWeekday = target.getDay() === start.getDay();
       const weeksPassed = Math.floor(diffDays / 7);
       return isSameWeekday && weeksPassed < (med.duration_days || 4);
     } else if (st === 'monthly') {
-      const isSameDayOfMonth = today.getDate() === start.getDate();
-      const monthsPassed = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+      const isSameDayOfMonth = target.getDate() === start.getDate();
+      const monthsPassed = (target.getFullYear() - start.getFullYear()) * 12 + (target.getMonth() - start.getMonth());
       return isSameDayOfMonth && monthsPassed < (med.duration_days || 3);
     } else if (st === 'alternate_days' || st === 'alternate days') {
       const isEvery2nd = diffDays % 2 === 0;
@@ -332,6 +378,10 @@ export default function PatientDashboard() {
     }
 
     return diffDays < (med.duration_days || 7);
+  };
+
+  const isAlarmDueToday = (med) => {
+    return isMedicationDueOnDate(med, new Date());
   };
 
   const getLocalDateString = (date) => {
@@ -456,10 +506,14 @@ export default function PatientDashboard() {
     return () => clearInterval(interval);
   }, [medicines, lastAlarmTime, routine]);
 
+  // Exact Background Alarm Scheduler using Date Objects (Invokes AlarmManager.setExactAndAllowWhileIdle on Android)
   const scheduleAllNotifications = async (medList) => {
     if (!Notifications) return;
     try {
       await Notifications.cancelAllScheduledNotificationsAsync();
+
+      const now = new Date();
+
       for (const med of medList) {
         if (isMedicineCompleted(med)) continue;
 
@@ -471,35 +525,35 @@ export default function PatientDashboard() {
           const hour = parseInt(hourStr, 10);
           const minute = parseInt(minuteStr, 10);
           if (isNaN(hour) || isNaN(minute)) continue;
-          
-          let trigger = null;
-          if (med.schedule_type === 'daily') {
-            trigger = { hour, minute, repeats: true };
-          } else if (med.schedule_type === 'weekly') {
-            const startDate = new Date(med.start_date || Date.now());
-            const weekday = startDate.getDay() + 1;
-            trigger = { weekday, hour, minute, repeats: true };
-          } else {
-            const startDate = new Date(med.start_date || Date.now());
-            const day = startDate.getDate();
-            trigger = { day, hour, minute, repeats: true };
+
+          // Schedule exact Date triggers for the next 7 upcoming days
+          for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+            const targetDate = new Date();
+            targetDate.setDate(now.getDate() + dayOffset);
+            targetDate.setHours(hour, minute, 0, 0);
+
+            // Skip if target date/time is in the past
+            if (targetDate.getTime() <= now.getTime()) continue;
+
+            // Check if medicine is due on targetDate according to schedule
+            if (!isMedicationDueOnDate(med, targetDate)) continue;
+
+            const title = `${t('Medication Time!')} ⏰`;
+            const body = `${t('Take:')} ${med.medicine_name} (${med.dosage}) - ${med.food_instruction ? t(med.food_instruction) : ''}`;
+            
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title,
+                body,
+                sound: 'default',
+                priority: Notifications.AndroidNotificationPriority.MAX,
+                channelId: 'medtrack-alarms',
+                categoryIdentifier: 'MED_ALARM_CATEGORY',
+                data: { medicineId: med.id },
+              },
+              trigger: targetDate, // Exact Date trigger forces setExactAndAllowWhileIdle on Android!
+            });
           }
-          
-          const title = `${t('Medication Time!')} ⏰`;
-          const body = `${t('Take:')} ${med.medicine_name} (${med.dosage}) - ${med.food_instruction ? t(med.food_instruction) : ''}`;
-          
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title,
-              body,
-              sound: 'default',
-              priority: Notifications.AndroidNotificationPriority.MAX,
-              channelId: 'medtrack-alarms',
-              categoryIdentifier: 'MED_ALARM_CATEGORY',
-              data: { medicineId: med.id },
-            },
-            trigger,
-          });
         }
       }
     } catch (err) {
@@ -599,7 +653,6 @@ export default function PatientDashboard() {
     }
   };
 
-  // Feature 3 Helper: Patient Medicine Information Generator
   const getMedicineInfoDetails = (med) => {
     const name = (med?.medicine_name || '').toLowerCase();
     const form = med?.medicine_form || 'Tablet';
@@ -712,6 +765,43 @@ export default function PatientDashboard() {
             <FlatList
               data={medicines}
               keyExtractor={(item) => item.id.toString()}
+              ListHeaderComponent={
+                <View>
+                  {!hasNotificationPermission && (
+                    <View style={styles.permissionWarningCard}>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                        <Text style={{ fontSize: 26 }}>🚨</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.permissionWarningTitle}>Background Medication Alarms Disabled!</Text>
+                          <Text style={styles.permissionWarningSub}>
+                            Android Notification & Alarm permissions are turned OFF. Your medication alarms will NOT ring when your app is closed or screen is locked until enabled.
+                          </Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity style={styles.enablePermissionBtn} onPress={handleEnablePermissions}>
+                        <Text style={styles.enablePermissionBtnText}>⚡ Enable Alarm Permissions & Settings</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {hasNotificationPermission && (
+                    <View style={styles.permissionInfoCard}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={{ fontSize: 18 }}>⏰</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.permissionInfoTitle}>Exact Alarms Active (setExactAndAllowWhileIdle)</Text>
+                          <Text style={styles.permissionInfoSub}>
+                            For 100% reliable background ringing when screen is off, verify "Alarms & Reminders" is ON in App Info.
+                          </Text>
+                        </View>
+                        <TouchableOpacity style={styles.checkSettingsBtn} onPress={handleOpenSettings}>
+                          <Text style={styles.checkSettingsBtnText}>⚙️ Check Settings</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              }
               renderItem={({ item }) => {
                 const completed = isMedicineCompleted(item);
                 const isClinicPharmacy = item.availability_source === 'clinic_pharmacy';
@@ -1189,6 +1279,51 @@ const styles = StyleSheet.create({
   activeTabText: { color: COLORS.primary },
   content: { flex: 1, padding: 20 },
   emptyText: { textAlign: 'center', marginTop: 40, color: COLORS.textSecondary, ...TYPOGRAPHY.body },
+  permissionWarningCard: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    ...SHADOWS.small,
+  },
+  permissionWarningTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#991B1B',
+    marginBottom: 4,
+  },
+  permissionWarningSub: {
+    fontSize: 12,
+    color: '#7F1D1D',
+    lineHeight: 17,
+  },
+  enablePermissionBtn: {
+    backgroundColor: '#DC2626',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  enablePermissionBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  permissionInfoCard: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+  },
+  permissionInfoTitle: { fontSize: 13, fontWeight: '800', color: '#166534' },
+  permissionInfoSub: { fontSize: 11, color: '#15803D', marginTop: 2, lineHeight: 15 },
+  checkSettingsBtn: { backgroundColor: '#DCFCE7', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#4ADE80' },
+  checkSettingsBtnText: { fontSize: 11, fontWeight: '700', color: '#15803D' },
   card: {
     backgroundColor: COLORS.surface,
     padding: 18,
