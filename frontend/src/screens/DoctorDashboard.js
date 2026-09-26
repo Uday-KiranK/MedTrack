@@ -1609,7 +1609,7 @@ const styles = StyleSheet.create({
   suggestionHeader: { fontSize: 11, fontWeight: '700', color: '#64748B', marginBottom: 6 },
   suggestionItem: {
     flexDirection: 'row',
-    justify.content: 'space-between',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 8,
