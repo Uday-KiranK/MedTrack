@@ -579,6 +579,7 @@ export default function PatientDashboard() {
             const title = `${t('Medication Time!')} ⏰`;
             const body = `${t('Take:')} ${med.medicine_name} (${med.dosage}) - ${med.food_instruction ? t(med.food_instruction) : ''}`;
             
+            // 1. Schedule exact Date trigger with explicit channelId
             await Notifications.scheduleNotificationAsync({
               content: {
                 title,
@@ -589,8 +590,35 @@ export default function PatientDashboard() {
                 categoryIdentifier: 'MED_ALARM_CATEGORY',
                 data: { medicineId: med.id },
               },
-              trigger: targetDate, // Exact Date trigger forces setExactAndAllowWhileIdle on Android!
+              trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date: targetDate,
+                channelId: 'medtrack-medication-alarms-v2',
+              },
             });
+
+            // 2. Also schedule repeating Daily trigger for daily schedule_type
+            if ((med.schedule_type || 'daily').toLowerCase() === 'daily') {
+              try {
+                await Notifications.scheduleNotificationAsync({
+                  content: {
+                    title,
+                    body,
+                    sound: 'alarm.wav',
+                    priority: Notifications.AndroidNotificationPriority.MAX,
+                    channelId: 'medtrack-medication-alarms-v2',
+                    categoryIdentifier: 'MED_ALARM_CATEGORY',
+                    data: { medicineId: med.id },
+                  },
+                  trigger: {
+                    type: Notifications.SchedulableTriggerInputTypes.DAILY,
+                    hour,
+                    minute,
+                    channelId: 'medtrack-medication-alarms-v2',
+                  },
+                });
+              } catch (e) {}
+            }
           }
         }
       }

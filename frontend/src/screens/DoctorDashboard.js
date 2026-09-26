@@ -567,6 +567,23 @@ export default function DoctorDashboard() {
   };
 
   const startEdit = (med) => {
+    let preset = 'Once Daily';
+    if (med.food_instruction === 'Specific Fixed Time') {
+      const count = med.custom_times?.length || 1;
+      if (count === 1) preset = 'Once Daily';
+      else if (count === 2) preset = 'Twice Daily';
+      else if (count === 3) preset = 'Thrice Daily';
+      else if (count === 4) preset = '4 Times Daily';
+    } else {
+      const count = med.meal_slots?.length || 1;
+      if (count === 1) preset = 'Once Daily';
+      else if (count === 2) preset = 'Twice Daily';
+      else if (count === 3) preset = 'Thrice Daily';
+      else if (count === 4) preset = '4 Times Daily';
+    }
+    if (med.schedule_type === 'weekly') preset = 'Weekly';
+    if (med.schedule_type === 'monthly') preset = 'Monthly';
+
     setEditingMedicine({
       id: med.id,
       medicine_name: med.medicine_name || '',
@@ -575,9 +592,74 @@ export default function DoctorDashboard() {
       schedule_type: med.schedule_type || 'daily',
       duration_days: med.duration_days?.toString() || '7',
       food_instruction: med.food_instruction || 'After Food',
-      meal_slots: med.meal_slots || ['Breakfast'],
-      custom_times: med.custom_times && med.custom_times.length > 0 ? med.custom_times : ['08:00'],
-      availability_source: med.availability_source || 'buy_outside'
+      frequency_preset: preset,
+      meal_slots: Array.isArray(med.meal_slots) && med.meal_slots.length > 0 ? med.meal_slots : ['Breakfast'],
+      custom_times: Array.isArray(med.custom_times) && med.custom_times.length > 0 ? med.custom_times : ['08:00'],
+      availability_source: med.availability_source || 'buy_outside',
+      showSuggestions: false,
+      suggestions: []
+    });
+  };
+
+  const handleEditNameChange = (val) => {
+    if (!editingMedicine) return;
+    const matches = inventory.filter(inv => 
+      inv.stock_quantity > 0 && inv.medicine_name.toLowerCase().includes(val.toLowerCase())
+    );
+    setEditingMedicine({
+      ...editingMedicine,
+      medicine_name: val,
+      showSuggestions: val.trim().length > 0 && matches.length > 0,
+      suggestions: matches
+    });
+  };
+
+  const selectEditInventorySuggestion = (invItem) => {
+    if (!editingMedicine) return;
+    setEditingMedicine({
+      ...editingMedicine,
+      medicine_name: invItem.medicine_name,
+      medicine_form: invItem.form || editingMedicine.medicine_form,
+      dosage: invItem.strength || editingMedicine.dosage,
+      availability_source: 'clinic_pharmacy',
+      showSuggestions: false,
+      suggestions: []
+    });
+  };
+
+  const toggleEditMealSlot = (slot) => {
+    if (!editingMedicine) return;
+    const currentSlots = editingMedicine.meal_slots || [];
+    const maxSlots = getMaxSlotsForFrequency(editingMedicine.frequency_preset);
+    
+    if (currentSlots.includes(slot)) {
+      if (currentSlots.length > 1) {
+        setEditingMedicine({
+          ...editingMedicine,
+          meal_slots: currentSlots.filter(s => s !== slot)
+        });
+      } else {
+        alert('At least one meal timing must be selected.');
+      }
+    } else {
+      if (currentSlots.length < maxSlots) {
+        setEditingMedicine({
+          ...editingMedicine,
+          meal_slots: [...currentSlots, slot]
+        });
+      } else {
+        alert(`For "${editingMedicine.frequency_preset}", you can select a maximum of ${maxSlots} meal slot(s).`);
+      }
+    }
+  };
+
+  const updateEditCustomTime = (tIdx, val) => {
+    if (!editingMedicine) return;
+    const updatedTimes = [...(editingMedicine.custom_times || [])];
+    updatedTimes[tIdx] = val;
+    setEditingMedicine({
+      ...editingMedicine,
+      custom_times: updatedTimes
     });
   };
 
@@ -590,8 +672,8 @@ export default function DoctorDashboard() {
         schedule_type: editingMedicine.schedule_type,
         duration_days: parseInt(editingMedicine.duration_days || '7', 10),
         food_instruction: editingMedicine.food_instruction,
-        meal_slots: editingMedicine.meal_slots || [],
-        custom_times: editingMedicine.food_instruction === 'Specific Fixed Time' ? editingMedicine.custom_times : [],
+        meal_slots: editingMedicine.food_instruction === 'Empty Stomach' ? ['Breakfast'] : (editingMedicine.food_instruction === 'Specific Fixed Time' ? [] : (editingMedicine.meal_slots || [])),
+        custom_times: editingMedicine.food_instruction === 'Specific Fixed Time' ? (editingMedicine.custom_times || []) : [],
         availability_source: editingMedicine.availability_source || 'buy_outside'
       };
       
@@ -1060,25 +1142,81 @@ export default function DoctorDashboard() {
             )}
           </View>
         ) : editingMedicine ? (
-           <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
+           <ScrollView contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
              <View style={styles.formCard}>
-                <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}}>
+                <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
                    <Text style={styles.sectionTitle}>{t('Edit Prescription Medicine')}</Text>
                    <TouchableOpacity onPress={() => setEditingMedicine(null)}>
-                      <Text style={{color: COLORS.primary, fontWeight: '700'}}>{t('Cancel')}</Text>
+                      <Text style={{color: COLORS.primary, fontWeight: '700', fontSize: 15}}>{t('Cancel')}</Text>
                    </TouchableOpacity>
                 </View>
 
+                {/* Medicine Name with Autocomplete */}
                 <Text style={styles.label}>{t('Medicine Name')}</Text>
-                <TextInput style={[styles.input, { color: '#0F172A' }]} placeholderTextColor="#64748B" value={editingMedicine.medicine_name} onChangeText={(val) => setEditingMedicine({...editingMedicine, medicine_name: val})} />
+                <TextInput 
+                  style={[styles.input, { color: '#0F172A' }]} 
+                  placeholder="e.g. Paracetamol 500mg" 
+                  placeholderTextColor="#64748B" 
+                  value={editingMedicine.medicine_name} 
+                  onChangeText={handleEditNameChange} 
+                />
 
+                {/* Autocomplete Dropdown */}
+                {editingMedicine.showSuggestions && editingMedicine.suggestions && editingMedicine.suggestions.length > 0 && (
+                  <View style={styles.suggestionsDropdown}>
+                    <Text style={styles.suggestionHeader}>Clinic Pharmacy Stock Items:</Text>
+                    {editingMedicine.suggestions.map((invItem) => (
+                      <TouchableOpacity 
+                        key={invItem.id} 
+                        style={styles.suggestionItem}
+                        onPress={() => selectEditInventorySuggestion(invItem)}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.suggestionName}>{invItem.medicine_name} ({invItem.strength})</Text>
+                          <Text style={styles.suggestionSub}>{invItem.brand_name || invItem.form} • Qty: {invItem.stock_quantity}</Text>
+                        </View>
+                        <View style={styles.inStockBadge}>
+                          <Text style={styles.inStockBadgeText}>In Stock – Clinic</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                {/* Availability Source Badge */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                  <TouchableOpacity 
+                    style={[
+                      styles.sourceBadge, 
+                      editingMedicine.availability_source === 'clinic_pharmacy' ? styles.sourceClinicActive : styles.sourceInactive
+                    ]}
+                    onPress={() => setEditingMedicine({ ...editingMedicine, availability_source: 'clinic_pharmacy' })}
+                  >
+                    <Text style={[styles.sourceText, editingMedicine.availability_source === 'clinic_pharmacy' && styles.sourceClinicText]}>
+                      ✓ In Stock – Clinic Pharmacy
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[
+                      styles.sourceBadge, 
+                      editingMedicine.availability_source === 'buy_outside' ? styles.sourceOutsideActive : styles.sourceInactive
+                    ]}
+                    onPress={() => setEditingMedicine({ ...editingMedicine, availability_source: 'buy_outside' })}
+                  >
+                    <Text style={[styles.sourceText, editingMedicine.availability_source === 'buy_outside' && styles.sourceOutsideText]}>
+                      🛒 Buy Outside
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Form and Frequency Row */}
                 <View style={styles.row}>
                   <View style={styles.col}>
                     <Text style={styles.label}>{t('Medicine Form')}</Text>
                     <View style={styles.pickerContainer}>
                       <Picker 
                         selectedValue={editingMedicine.medicine_form || 'Tablet'} 
-                        onValueChange={(val) => setEditingMedicine({...editingMedicine, medicine_form: val})}
+                        onValueChange={(val) => setEditingMedicine({ ...editingMedicine, medicine_form: val })}
                         style={styles.pickerStyle}
                         dropdownIconColor="#0F172A"
                       >
@@ -1093,18 +1231,54 @@ export default function DoctorDashboard() {
                   </View>
 
                   <View style={styles.col}>
-                    <Text style={styles.label}>{t('Dosage')}</Text>
-                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholderTextColor="#64748B" value={editingMedicine.dosage} onChangeText={(val) => setEditingMedicine({...editingMedicine, dosage: val})} />
+                    <Text style={styles.label}>{t('Frequency / Schedule')}</Text>
+                    <View style={styles.pickerContainer}>
+                      <Picker 
+                        selectedValue={editingMedicine.frequency_preset || 'Once Daily'} 
+                        onValueChange={(val) => setEditingMedicine({ ...editingMedicine, frequency_preset: val })}
+                        style={styles.pickerStyle}
+                        dropdownIconColor="#0F172A"
+                      >
+                        {SCHEDULE_PRESETS.map((preset) => (
+                          <Picker.Item key={preset} label={preset} value={preset} color="#0F172A" style={styles.pickerItemStyle} />
+                        ))}
+                      </Picker>
+                    </View>
                   </View>
                 </View>
 
+                {/* Dosage Presets & Custom Input */}
+                <Text style={styles.label}>{t('Dosage / Quantity per intake')}</Text>
+                <View style={styles.chipRow}>
+                  {(DOSAGE_PRESETS[editingMedicine.medicine_form || 'Tablet'] || DOSAGE_PRESETS['Tablet']).map((dOption) => {
+                    const isActive = editingMedicine.dosage === dOption;
+                    return (
+                      <TouchableOpacity
+                        key={dOption}
+                        style={[styles.chip, isActive && styles.chipActive]}
+                        onPress={() => setEditingMedicine({ ...editingMedicine, dosage: dOption })}
+                      >
+                        <Text style={[styles.chipText, isActive && styles.chipActiveText]}>{dOption}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <TextInput 
+                  style={[styles.input, { marginTop: 6, color: '#0F172A' }]} 
+                  placeholder="Or type custom dosage (e.g. 10ml, 2 tabs)"
+                  placeholderTextColor="#64748B"
+                  value={editingMedicine.dosage}
+                  onChangeText={(val) => setEditingMedicine({ ...editingMedicine, dosage: val })}
+                />
+
+                {/* Duration Type and Duration Count */}
                 <View style={styles.row}>
                   <View style={styles.col}>
-                     <Text style={styles.label}>{t('Schedule Type')}</Text>
+                     <Text style={styles.label}>{t('Duration Type')}</Text>
                      <View style={styles.pickerContainer}>
                        <Picker 
                          selectedValue={editingMedicine.schedule_type} 
-                         onValueChange={(val) => setEditingMedicine({...editingMedicine, schedule_type: val})}
+                         onValueChange={(val) => setEditingMedicine({ ...editingMedicine, schedule_type: val })}
                          style={styles.pickerStyle}
                          dropdownIconColor="#0F172A"
                        >
@@ -1119,22 +1293,29 @@ export default function DoctorDashboard() {
                   <View style={styles.col}>
                      <Text style={styles.label}>
                        {editingMedicine.schedule_type === 'weekly' 
-                          ? t('Weeks') 
-                          : editingMedicine.schedule_type === 'monthly' 
-                            ? t('Months') 
-                            : t('Days')}
+                         ? t('Weeks Count') 
+                         : editingMedicine.schedule_type === 'monthly' 
+                           ? t('Months Count') 
+                           : t('Days Count')}
                      </Text>
-                     <TextInput style={[styles.input, { color: '#0F172A' }]} placeholderTextColor="#64748B" value={editingMedicine.duration_days} onChangeText={(val) => setEditingMedicine({...editingMedicine, duration_days: val})} keyboardType="numeric" />
+                     <TextInput 
+                       style={[styles.input, { color: '#0F172A' }]} 
+                       placeholderTextColor="#64748B"
+                       value={editingMedicine.duration_days}
+                       onChangeText={(val) => setEditingMedicine({ ...editingMedicine, duration_days: val })}
+                       keyboardType="numeric"
+                     />
                   </View>
                 </View>
 
+                {/* Food / Timing Instruction */}
                 <View style={styles.row}>
                   <View style={styles.col}>
-                     <Text style={styles.label}>{t('Food Instructions')}</Text>
+                     <Text style={styles.label}>{t('Food / Timing Instruction')}</Text>
                      <View style={styles.pickerContainer}>
                        <Picker 
                          selectedValue={editingMedicine.food_instruction} 
-                         onValueChange={(val) => setEditingMedicine({...editingMedicine, food_instruction: val})}
+                         onValueChange={(val) => setEditingMedicine({ ...editingMedicine, food_instruction: val })}
                          style={styles.pickerStyle}
                          dropdownIconColor="#0F172A"
                        >
@@ -1146,9 +1327,57 @@ export default function DoctorDashboard() {
                        </Picker>
                      </View>
                   </View>
+
+                  {editingMedicine.food_instruction === 'Specific Fixed Time' && (
+                    <View style={styles.col}>
+                       <Text style={styles.label}>{t('Specific Fixed Timings')}</Text>
+                       {Array.from({ length: getMaxSlotsForFrequency(editingMedicine.frequency_preset) }).map((_, tIdx) => (
+                         <TextInput 
+                           key={tIdx}
+                           style={[styles.input, { marginBottom: 6, color: '#0F172A' }]} 
+                           placeholder={`Time #${tIdx + 1} (e.g. ${tIdx === 0 ? '08:00' : tIdx === 1 ? '20:00' : '14:00'})`} 
+                           placeholderTextColor="#64748B"
+                           value={(editingMedicine.custom_times || [])[tIdx] || ''}
+                           onChangeText={(val) => updateEditCustomTime(tIdx, val)}
+                         />
+                       ))}
+                    </View>
+                  )}
                 </View>
 
-                <TouchableOpacity style={styles.primaryButton} onPress={handleSaveEdit}>
+                {editingMedicine.food_instruction === 'Empty Stomach' && (
+                  <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginVertical: 8, borderWidth: 1, borderColor: '#F59E0B' }}>
+                    <Text style={{ color: '#92400E', fontSize: 13, fontWeight: '700' }}>
+                      ⚡ Empty Stomach automatically defaults to 07:30 AM (Before Breakfast).
+                    </Text>
+                  </View>
+                )}
+
+                {editingMedicine.food_instruction !== 'Specific Fixed Time' && editingMedicine.food_instruction !== 'Empty Stomach' && (
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={styles.label}>
+                      {t('Select Meal Timings')} ({(editingMedicine.meal_slots || []).length}/{getMaxSlotsForFrequency(editingMedicine.frequency_preset)} selected)
+                    </Text>
+                    <View style={styles.chipRow}>
+                      {MEAL_SLOT_OPTIONS.map((slot) => {
+                        const isSelected = (editingMedicine.meal_slots || []).includes(slot);
+                        return (
+                          <TouchableOpacity
+                            key={slot}
+                            style={[styles.mealChip, isSelected && styles.mealChipActive]}
+                            onPress={() => toggleEditMealSlot(slot)}
+                          >
+                            <Text style={[styles.mealChipText, isSelected && styles.mealChipActiveText]}>
+                              {isSelected ? '✓ ' : ''}{slot}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                <TouchableOpacity style={[styles.primaryButton, { marginTop: 20 }]} onPress={handleSaveEdit}>
                   <Text style={styles.primaryButtonText}>{t('Save Changes')}</Text>
                 </TouchableOpacity>
              </View>
