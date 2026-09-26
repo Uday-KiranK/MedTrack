@@ -102,17 +102,18 @@ export default function PatientDashboard() {
             shouldShowAlert: true,
             shouldPlaySound: true,
             shouldSetBadge: true,
+            priority: Notifications.AndroidNotificationPriority.MAX,
           }),
         });
       }
 
       if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('medtrack-alarms', {
-          name: 'MedTrack Alarms',
+        await Notifications.setNotificationChannelAsync('medtrack-medication-alarms-v2', {
+          name: 'MedTrack Medication Alarms',
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 500, 500, 500],
           lightColor: '#1A9988',
-          sound: 'default',
+          sound: 'alarm.wav',
           lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
           bypassDnd: true,
           audioAttributes: {
@@ -190,10 +191,30 @@ export default function PatientDashboard() {
   useEffect(() => {
     if (!Notifications) return;
 
-    const responseListener = Notifications.addNotificationResponseReceivedListener(async (response) => {
+    const notificationListener = Notifications.addNotificationReceivedListener && Notifications.addNotificationReceivedListener(async (notification) => {
+      try {
+        const medicineId = notification.request.content.data?.medicineId;
+        let targetMeds = [];
+        if (medicineId) {
+          targetMeds = medicines.filter(m => m.id === medicineId);
+        }
+        if (!targetMeds || targetMeds.length === 0) {
+          targetMeds = medicines;
+        }
+        if (targetMeds.length > 0) {
+          setActiveAlarms(targetMeds);
+          await playSound(targetMeds);
+        }
+      } catch (e) {
+        console.log("Notification received listener error:", e);
+      }
+    });
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener && Notifications.addNotificationResponseReceivedListener(async (response) => {
       const medicineId = response.notification.request.content.data?.medicineId;
       
       await stopSound();
+      setActiveAlarms([]);
       
       if (medicineId) {
         try {
@@ -204,11 +225,14 @@ export default function PatientDashboard() {
     });
 
     return () => {
+      if (notificationListener && notificationListener.remove) {
+        notificationListener.remove();
+      }
       if (responseListener && responseListener.remove) {
         responseListener.remove();
       }
     };
-  }, []);
+  }, [medicines]);
 
   const calculateAlarmTimesForMed = (med) => {
     if (med.food_instruction === 'Specific Fixed Time' && med.custom_times && med.custom_times.length > 0) {
@@ -250,57 +274,71 @@ export default function PatientDashboard() {
 
   const playSound = async (medItems) => {
     try {
-       await stopSound();
+      await stopSound();
 
-       const soundSource = routine.ringtone_uri && routine.ringtone_uri !== 'default' 
-         ? routine.ringtone_uri 
-         : 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
+      const customUri = routine.ringtone_uri && routine.ringtone_uri !== 'default' ? routine.ringtone_uri : null;
+      let soundPlayed = false;
 
-       if (createAudioPlayer) {
-          try {
-            const player = createAudioPlayer(soundSource);
-            player.loop = true;
-            player.play();
-            soundRef.current = player;
-          } catch (audioErr) {
-            console.log("createAudioPlayer error", audioErr);
-          }
-       }
+      if (createAudioPlayer) {
+        try {
+          const audioSource = customUri ? { uri: customUri } : require('../../assets/alarm.wav');
+          const player = createAudioPlayer(audioSource);
+          player.loop = true;
+          player.play();
+          soundRef.current = player;
+          soundPlayed = true;
+        } catch (audioErr) {
+          console.log("createAudioPlayer error", audioErr);
+        }
+      }
 
-       const medNamesStr = medItems.map(m => m.medicine_name).join(', ');
-       const textToSpeak = `${t('Medication Time!')} ${t('Take:')} ${medNamesStr}`;
-       const lang = i18n.language === 'en' ? 'en-IN' : `${i18n.language}-IN`;
-       
-       if (Speech && Speech.speak) {
-         Speech.speak(textToSpeak, { language: lang });
-         speechIntervalRef.current = setInterval(() => {
-            Speech.speak(textToSpeak, { language: lang });
-         }, 6000);
-       }
+      if (!soundPlayed && typeof window !== 'undefined' && window.Audio) {
+        try {
+          const alarmWav = require('../../assets/alarm.wav');
+          const webAudio = new window.Audio(typeof alarmWav === 'string' ? alarmWav : (alarmWav?.uri || customUri));
+          webAudio.loop = true;
+          webAudio.play().catch(e => console.log("Web audio error", e));
+          soundRef.current = webAudio;
+        } catch (e) {}
+      }
+
+      const medNamesStr = Array.isArray(medItems) && medItems.length > 0 ? medItems.map(m => m.medicine_name).join(', ') : 'Medication';
+      const textToSpeak = `${t('Medication Time!')} ${t('Take:')} ${medNamesStr}`;
+      const lang = i18n.language === 'en' ? 'en-IN' : `${i18n.language}-IN`;
+      
+      if (Speech && Speech.speak) {
+        Speech.speak(textToSpeak, { language: lang });
+        speechIntervalRef.current = setInterval(() => {
+          Speech.speak(textToSpeak, { language: lang });
+        }, 6000);
+      }
 
     } catch(err) {
-       console.log("Audio play error", err);
+      console.log("Audio play error", err);
     }
   };
 
   const stopSound = async () => {
     if (soundRef.current) {
-       try {
-         if (typeof soundRef.current.pause === 'function') soundRef.current.pause();
-         if (typeof soundRef.current.remove === 'function') soundRef.current.remove();
-       } catch (e) {
-         console.log("Error stopping sound", e);
-       }
-       soundRef.current = null;
+      try {
+        if (typeof soundRef.current.pause === 'function') soundRef.current.pause();
+        if (typeof soundRef.current.stop === 'function') soundRef.current.stop();
+        if (typeof soundRef.current.remove === 'function') soundRef.current.remove();
+      } catch (e) {
+        console.log("Error stopping sound", e);
+      }
+      soundRef.current = null;
     }
 
     if (speechIntervalRef.current) {
-       clearInterval(speechIntervalRef.current);
-       speechIntervalRef.current = null;
+      clearInterval(speechIntervalRef.current);
+      speechIntervalRef.current = null;
     }
 
     if (Speech && Speech.stop) {
-      Speech.stop();
+      try {
+        Speech.stop();
+      } catch (e) {}
     }
   };
 
@@ -545,9 +583,9 @@ export default function PatientDashboard() {
               content: {
                 title,
                 body,
-                sound: 'default',
+                sound: 'alarm.wav',
                 priority: Notifications.AndroidNotificationPriority.MAX,
-                channelId: 'medtrack-alarms',
+                channelId: 'medtrack-medication-alarms-v2',
                 categoryIdentifier: 'MED_ALARM_CATEGORY',
                 data: { medicineId: med.id },
               },
