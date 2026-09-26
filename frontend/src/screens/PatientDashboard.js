@@ -137,16 +137,6 @@ export default function PatientDashboard() {
           } catch (audioErr) {
             console.log("createAudioPlayer error", audioErr);
           }
-       } else if (LegacyAudio) {
-          try {
-            const { sound: defaultSound } = await LegacyAudio.Sound.createAsync(
-              { uri: soundSource },
-              { shouldPlay: true, isLooping: true }
-            );
-            soundRef.current = defaultSound;
-          } catch (audioErr) {
-            console.log("LegacyAudio error", audioErr);
-          }
        }
 
        // Text To Speech Loop (reads out all matching medicines)
@@ -173,12 +163,6 @@ export default function PatientDashboard() {
         const player = createAudioPlayer(uri);
         player.play();
         soundRef.current = player;
-      } else if (LegacyAudio) {
-        const { sound: defaultSound } = await LegacyAudio.Sound.createAsync(
-          { uri },
-          { shouldPlay: true }
-        );
-        soundRef.current = defaultSound;
       }
     } catch (e) {
       console.log('Error testing ringtone', e);
