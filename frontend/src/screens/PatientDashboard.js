@@ -39,6 +39,9 @@ export default function PatientDashboard() {
   const [loadingMeds, setLoadingMeds] = useState(false);
   const [showCalendarMed, setShowCalendarMed] = useState(null);
 
+  // Feature 3: Patient Medicine Info Modal state
+  const [selectedMedicineInfo, setSelectedMedicineInfo] = useState(null);
+
   // Patient Routine state
   const [routine, setRoutine] = useState({
     breakfast_time: userInfo?.breakfast_time || '08:00',
@@ -62,6 +65,7 @@ export default function PatientDashboard() {
 
   useEffect(() => {
     setupNotifications();
+    requestNotificationPermissions();
     fetchMedicines();
     loadCustomRingtoneName();
     if (userInfo && userInfo.routine_configured === false) {
@@ -84,7 +88,7 @@ export default function PatientDashboard() {
           handleNotification: async () => ({
             shouldShowAlert: true,
             shouldPlaySound: true,
-            shouldSetBadge: false,
+            shouldSetBadge: true,
           }),
         });
       }
@@ -118,6 +122,22 @@ export default function PatientDashboard() {
       console.log('Notification setup note:', err.message);
     }
   };
+
+  async function requestNotificationPermissions() {
+    if (!Notifications) return false;
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      return finalStatus === 'granted';
+    } catch (err) {
+      console.log('Notification permission note:', err.message);
+      return false;
+    }
+  }
 
   useEffect(() => {
     if (!Notifications) return;
@@ -166,11 +186,12 @@ export default function PatientDashboard() {
       let h = parseInt(hStr, 10) || 8;
       let m = parseInt(mStr, 10) || 0;
 
+      // Adjusted to ~10 min offset as requested by user
       if (med.food_instruction === 'After Food') {
-        m += 30;
+        m += 10;
         if (m >= 60) { h = (h + 1) % 24; m -= 60; }
       } else if (med.food_instruction === 'Before Food') {
-        m -= 30;
+        m -= 10;
         if (m < 0) { h = (h - 1 + 24) % 24; m += 60; }
       }
 
@@ -287,7 +308,6 @@ export default function PatientDashboard() {
     const start = new Date(med.start_date);
     start.setHours(0,0,0,0);
 
-    // If start date is in the future, alarm is NOT due today
     if (today < start) return false;
 
     const diffDays = Math.floor((today.getTime() - start.getTime()) / (1000 * 3600 * 24));
@@ -442,7 +462,6 @@ export default function PatientDashboard() {
       await Notifications.cancelAllScheduledNotificationsAsync();
       for (const med of medList) {
         if (isMedicineCompleted(med)) continue;
-        if (!isAlarmDueToday(med)) continue;
 
         const alarmTimes = calculateAlarmTimesForMed(med);
         if (!alarmTimes || alarmTimes.length === 0) continue;
@@ -580,10 +599,50 @@ export default function PatientDashboard() {
     }
   };
 
+  // Feature 3 Helper: Patient Medicine Information Generator
+  const getMedicineInfoDetails = (med) => {
+    const name = (med?.medicine_name || '').toLowerCase();
+    const form = med?.medicine_form || 'Tablet';
+
+    let uses = "Used to treat and manage medical conditions as prescribed by your physician.";
+    let howToTake = `Take ${med?.dosage || '1 unit'} as directed by your doctor. Swallow whole with a full glass of water.`;
+    let sideEffects = "Mild nausea, headache, dizziness, or mild stomach upset may occur.";
+    let precautions = "Do not double your dose if missed. Inform your doctor if you are pregnant, nursing, or taking other medications.";
+    let storage = "Store at room temperature (below 30°C) away from moisture, heat, and direct sunlight. Keep out of reach of children.";
+
+    if (name.includes('paracetamol') || name.includes('crocin') || name.includes('dolo') || name.includes('acetaminophen')) {
+      uses = "Relieves mild to moderate pain (headache, body ache, toothache) and reduces fever.";
+      howToTake = `Take ${med?.dosage || '1 Tablet'} after meals with water. Do not exceed 4000mg per day to protect liver health.`;
+      sideEffects = "Rare side effects include allergic rash, nausea, or liver toxicity if taken in overdose.";
+      precautions = "Avoid alcohol during treatment. Do not take alongside other paracetamol-containing medications.";
+    } else if (name.includes('amoxicillin') || name.includes('azithromycin') || name.includes('ciplox') || name.includes('antibiotic')) {
+      uses = "Treats bacterial infections of the respiratory tract, throat, ears, skin, or urinary tract.";
+      howToTake = `Take ${med?.dosage || '1 unit'} at fixed intervals daily. Complete the full prescribed course even if symptoms disappear early.`;
+      sideEffects = "Mild diarrhea, soft stools, nausea, abdominal discomfort, or skin rash.";
+      precautions = "Finish full antibiotic course. Seek emergency care immediately if severe rash or facial swelling occurs.";
+    } else if (name.includes('metformin') || name.includes('glycomet') || name.includes('diabetes')) {
+      uses = "Helps control high blood sugar levels in patients with Type 2 Diabetes.";
+      howToTake = `Take ${med?.dosage || '1 Tablet'} with or immediately after meals to minimize stomach upset.`;
+      sideEffects = "Nausea, mild indigestion, gas, metallic taste, or diarrhea during initial weeks.";
+      precautions = "Stay hydrated. Avoid heavy alcohol intake. Report unusual muscle pain or severe weakness to your doctor.";
+    } else if (name.includes('pantoprazole') || name.includes('pan') || name.includes('omeprazole') || name.includes('rabeprazole') || name.includes('acidity')) {
+      uses = "Reduces stomach acid production, treating acidity, heartburn, GERD, and stomach ulcers.";
+      howToTake = `Take ${med?.dosage || '1 Tablet'} 30 minutes before breakfast on an empty stomach with water.`;
+      sideEffects = "Headache, constipation, mild diarrhea, abdominal discomfort.";
+      precautions = "Swallow whole — do not crush or chew prolonged release tablets.";
+    } else if (name.includes('cough') || name.includes('syrup') || form === 'Syrup') {
+      uses = "Soothes cough, clear nasal congestion, and thins airway mucus for easier breathing.";
+      howToTake = `Measure exact dose using measuring cup/spoon (${med?.dosage || '10ml'}). Take ~10 minutes after food.`;
+      sideEffects = "Drowsiness, dry mouth, mild dizziness, or light stomach discomfort.";
+      precautions = "Do not drive or operate machinery if feeling sleepy. Avoid drinking water immediately after syrup to allow throat soothing.";
+    }
+
+    return { uses, howToTake, sideEffects, precautions, storage };
+  };
+
   const renderFormattedText = (text) => {
     if (!text) return null;
-    const lines = text.split('
-');
+    const lines = text.split('\n');
     return lines.map((line, index) => {
       const cleanLine = line.replace(/\*\*/g, '').trim();
       if (!cleanLine) return null;
@@ -697,19 +756,28 @@ export default function PatientDashboard() {
                         ⏰ <Text style={{ fontWeight: '700' }}>Alarm Times:</Text> {alarmTimes.join(', ')}
                       </Text>
                       <Text style={styles.dateRangeText}>
-                        🍽️ <Text style={{ fontWeight: '700' }}>Instruction:</Text> {item.food_instruction ? t(item.food_instruction) : 'After Food'}
+                        🍽️ <Text style={{ fontWeight: '700' }}>Instruction:</Text> {item.food_instruction ? t(item.food_instruction) : 'After Food'} (~10m offset)
                       </Text>
                       <Text style={styles.dateRangeText}>
                         🚀 <Text style={{ fontWeight: '700' }}>Starts:</Text> {formatDisplayDate(item.start_date || new Date())} {isTodayDue ? ' (Fires Today 🔔)' : ' (Starts Later)'}
                       </Text>
                     </View>
 
-                    <TouchableOpacity 
-                      style={styles.showHistoryBtn}
-                      onPress={() => setShowCalendarMed(item)}
-                    >
-                      <Text style={styles.showHistoryBtnText}>📅 {t('View History & Streak Calendar')}</Text>
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                      <TouchableOpacity 
+                        style={[styles.showHistoryBtn, { flex: 1, marginTop: 0 }]}
+                        onPress={() => setSelectedMedicineInfo(item)}
+                      >
+                        <Text style={styles.showHistoryBtnText}>ℹ️ Medicine Info</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity 
+                        style={[styles.showHistoryBtn, { flex: 1, marginTop: 0, backgroundColor: '#E0F2FE', borderColor: COLORS.primary }]}
+                        onPress={() => setShowCalendarMed(item)}
+                      >
+                        <Text style={[styles.showHistoryBtnText, { color: COLORS.primary }]}>📅 Streak History</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 );
               }}
@@ -748,6 +816,67 @@ export default function PatientDashboard() {
         )}
       </View>
 
+      {/* Feature 3: Patient Medicine Info Modal */}
+      <Modal visible={!!selectedMedicineInfo} transparent={true} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.routineModalCard}>
+            {selectedMedicineInfo && (() => {
+              const info = getMedicineInfoDetails(selectedMedicineInfo);
+              return (
+                <View style={{ flex: 1 }}>
+                  <View style={styles.modalHeaderRow}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={styles.routineModalTitle}>💊 {selectedMedicineInfo.medicine_name}</Text>
+                      <Text style={styles.routineModalSub}>{selectedMedicineInfo.dosage} • {selectedMedicineInfo.medicine_form || 'Tablet'}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setSelectedMedicineInfo(null)}>
+                      <Text style={styles.closeModalCross}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView showsVerticalScrollIndicator={true} contentContainerStyle={{ paddingBottom: 24 }}>
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>🎯 Primary Uses & Purpose</Text>
+                      <Text style={styles.infoBoxText}>{info.uses}</Text>
+                    </View>
+
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>🕒 How & When to Take</Text>
+                      <Text style={styles.infoBoxText}>{info.howToTake}</Text>
+                      <Text style={[styles.infoBoxText, { marginTop: 4, fontStyle: 'italic', color: COLORS.primary }]}>
+                        Doctor Instruction: {selectedMedicineInfo.food_instruction || 'After Food'} (~10 min meal gap)
+                      </Text>
+                    </View>
+
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>⚠️ Common Side Effects</Text>
+                      <Text style={styles.infoBoxText}>{info.sideEffects}</Text>
+                    </View>
+
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>🛡️ Precautions & Warnings</Text>
+                      <Text style={styles.infoBoxText}>{info.precautions}</Text>
+                    </View>
+
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>📦 Storage Instructions</Text>
+                      <Text style={styles.infoBoxText}>{info.storage}</Text>
+                    </View>
+
+                    <TouchableOpacity 
+                      style={[styles.saveRoutineBtn, { marginTop: 12 }]} 
+                      onPress={() => setSelectedMedicineInfo(null)}
+                    >
+                      <Text style={styles.saveRoutineBtnText}>✓ Got it, Thanks!</Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+                </View>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
       {/* Persistent Alarm Modal */}
       <Modal visible={activeAlarms.length > 0} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
@@ -772,7 +901,7 @@ export default function PatientDashboard() {
         </View>
       </Modal>
 
-      {/* Initial Routine Onboarding Modal (Properly styled white card) */}
+      {/* Initial Routine Onboarding Modal */}
       <Modal visible={onboardingModalVisible} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.routineModalCard}>
@@ -1272,4 +1401,14 @@ const styles = StyleSheet.create({
   calendarStartCell: { borderColor: '#F59E0B', borderWidth: 2 },
   calendarStartCellText: { fontWeight: '800' },
   calendarStartStar: { position: 'absolute', bottom: -1, fontSize: 8, color: '#D97706' },
+  infoBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  infoBoxTitle: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginBottom: 4 },
+  infoBoxText: { fontSize: 13, color: '#334155', lineHeight: 18 },
 });
