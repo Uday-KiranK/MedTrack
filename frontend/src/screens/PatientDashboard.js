@@ -10,43 +10,22 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 const isExpoGo = Constants?.executionEnvironment === ExecutionEnvironment?.StoreClient;
 
 let Notifications = null;
-if (!isExpoGo) {
-  try {
-    Notifications = require('expo-notifications');
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-      }),
-    });
-  } catch (e) {
-    console.log("Notification loader note:", e.message);
-  }
+try {
+  Notifications = require('expo-notifications');
+} catch (e) {
+  console.log("Notification loader note:", e.message);
 }
 
 // Safe Audio loader for SDK 57 compatibility
 let createAudioPlayer = null;
-let LegacyAudio = null;
 try {
   const expoAudio = require('expo-audio');
   createAudioPlayer = expoAudio.createAudioPlayer;
 } catch (e) {}
 
-try {
-  LegacyAudio = require('expo-av').Audio;
-} catch (e) {}
-
 import { AuthContext, API_URL } from '../context/AuthContext';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../theme/theme';
 import LanguageSelectorModal, { LanguageButton } from '../components/LanguageSelectorModal';
-
-const RINGTONE_OPTIONS = [
-  { label: 'Default Beep', value: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' },
-  { label: 'Gentle Chime', value: 'https://actions.google.com/sounds/v1/alarms/digital_watch_alarm.ogg' },
-  { label: 'Classic Alarm', value: 'https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg' },
-  { label: 'Soft Bell', value: 'https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg' }
-];
 
 export default function PatientDashboard() {
   const { t, i18n } = useTranslation();
@@ -64,11 +43,12 @@ export default function PatientDashboard() {
   // Patient Routine state
   const [routine, setRoutine] = useState({
     breakfast_time: userInfo?.breakfast_time || '08:00',
-    lunch_time: userInfo?.lunch_time || '13:00',
-    dinner_time: userInfo?.dinner_time || '20:00',
+    lunch_time: userInfo?.lunch_time || '13:30',
+    dinner_time: userInfo?.dinner_time || '20:30',
     bedtime: userInfo?.bedtime || '22:00',
-    ringtone_uri: userInfo?.ringtone_uri || 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg'
+    ringtone_uri: userInfo?.ringtone_uri || 'default'
   });
+  const [customRingtoneName, setCustomRingtoneName] = useState('');
   const [savingRoutine, setSavingRoutine] = useState(false);
 
   // Labs state
@@ -82,10 +62,87 @@ export default function PatientDashboard() {
   const speechIntervalRef = useRef(null);
 
   useEffect(() => {
+    setupNotifications();
     fetchMedicines();
+    loadCustomRingtoneName();
     if (userInfo && userInfo.routine_configured === false) {
       setOnboardingModalVisible(true);
     }
+  }, []);
+
+  const loadCustomRingtoneName = async () => {
+    try {
+      const name = await AsyncStorage.getItem('custom_ringtone_name');
+      if (name) setCustomRingtoneName(name);
+    } catch (e) {}
+  };
+
+  const setupNotifications = async () => {
+    if (!Notifications) return;
+    try {
+      if (typeof Notifications.setNotificationHandler === 'function') {
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+          }),
+        });
+      }
+
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('medtrack-alarms', {
+          name: 'MedTrack Alarms',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 500, 500, 500],
+          lightColor: '#1A9988',
+          sound: 'default',
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          bypassDnd: true,
+          audioAttributes: {
+            usage: Notifications.AndroidAudioUsage.ALARM,
+            contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+          }
+        });
+
+        await Notifications.setNotificationCategoryAsync('MED_ALARM_CATEGORY', [
+          {
+            identifier: 'TAKEN_ACTION',
+            buttonTitle: "✓ OK, I've Taken",
+            options: {
+              opensAppToForeground: true,
+            },
+          }
+        ]);
+      }
+    } catch (err) {
+      console.log('Notification setup note:', err.message);
+    }
+  };
+
+  // Listen for user tapping "✓ OK, I've Taken" from Notification or Lock Screen
+  useEffect(() => {
+    if (!Notifications) return;
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener(async (response) => {
+      const actionId = response.actionIdentifier;
+      const medicineId = response.notification.request.content.data?.medicineId;
+      
+      await stopSound();
+      
+      if (medicineId) {
+        try {
+          await axios.post(`${API_URL}/prescriptions/intake`, { medicineId });
+        } catch (e) {}
+        fetchMedicines();
+      }
+    });
+
+    return () => {
+      if (responseListener && responseListener.remove) {
+        responseListener.remove();
+      }
+    };
   }, []);
 
   const calculateAlarmTimesForMed = (med) => {
@@ -99,8 +156,8 @@ export default function PatientDashboard() {
     slots.forEach((slot) => {
       let baseTimeStr = '08:00';
       if (slot === 'Breakfast') baseTimeStr = routine.breakfast_time || '08:00';
-      else if (slot === 'Lunch') baseTimeStr = routine.lunch_time || '13:00';
-      else if (slot === 'Dinner') baseTimeStr = routine.dinner_time || '20:00';
+      else if (slot === 'Lunch') baseTimeStr = routine.lunch_time || '13:30';
+      else if (slot === 'Dinner') baseTimeStr = routine.dinner_time || '20:30';
       else if (slot === 'Bedtime') baseTimeStr = routine.bedtime || '22:00';
 
       const [hStr, mStr] = baseTimeStr.split(':');
@@ -126,7 +183,9 @@ export default function PatientDashboard() {
     try {
        await stopSound(); // Stop any currently playing audio
 
-       const soundSource = routine.ringtone_uri || 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
+       const soundSource = routine.ringtone_uri && routine.ringtone_uri !== 'default' 
+         ? routine.ringtone_uri 
+         : 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
 
        if (createAudioPlayer) {
           try {
@@ -156,29 +215,11 @@ export default function PatientDashboard() {
     }
   };
 
-  const testRingtone = async (uri) => {
-    try {
-      await stopSound();
-      if (createAudioPlayer) {
-        const player = createAudioPlayer(uri);
-        player.play();
-        soundRef.current = player;
-      }
-    } catch (e) {
-      console.log('Error testing ringtone', e);
-    }
-  };
-
   const stopSound = async () => {
     if (soundRef.current) {
        try {
-         if (typeof soundRef.current.remove === 'function') {
-           soundRef.current.remove();
-         } else if (typeof soundRef.current.stop === 'function') {
-           soundRef.current.stop();
-         } else if (typeof soundRef.current.unloadAsync === 'function') {
-           await soundRef.current.unloadAsync();
-         }
+         if (typeof soundRef.current.pause === 'function') soundRef.current.pause();
+         if (typeof soundRef.current.remove === 'function') soundRef.current.remove();
        } catch (e) {
          console.log("Error stopping sound", e);
        }
@@ -354,10 +395,6 @@ export default function PatientDashboard() {
     return () => clearInterval(interval);
   }, [medicines, lastAlarmTime, routine]);
 
-  useEffect(() => {
-    requestNotificationPermissions();
-  }, []);
-
   async function requestNotificationPermissions() {
     if (!Notifications) return false;
     try {
@@ -367,19 +404,7 @@ export default function PatientDashboard() {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
-      if (finalStatus !== 'granted') {
-        return false;
-      }
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('medtrack-alarms', {
-          name: 'MedTrack Alarms',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#FF231F7C',
-          sound: 'default',
-        });
-      }
-      return true;
+      return finalStatus === 'granted';
     } catch (err) {
       console.log('Notification permission note:', err.message);
       return false;
@@ -421,9 +446,10 @@ export default function PatientDashboard() {
             content: {
               title,
               body,
-              sound: true,
+              sound: 'default',
               priority: Notifications.AndroidNotificationPriority.MAX,
               channelId: 'medtrack-alarms',
+              categoryIdentifier: 'MED_ALARM_CATEGORY',
               data: { medicineId: med.id },
             },
             trigger,
@@ -447,6 +473,25 @@ export default function PatientDashboard() {
       setMedicines([]);
     } finally {
       setLoadingMeds(false);
+    }
+  };
+
+  const handlePickRingtone = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'audio/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const file = result.assets[0];
+        setRoutine({ ...routine, ringtone_uri: file.uri });
+        setCustomRingtoneName(file.name || 'Custom Audio');
+        await AsyncStorage.setItem('custom_ringtone_name', file.name || 'Custom Audio');
+        alert('Custom Ringtone selected! Tap Save Changes to keep it.');
+      }
+    } catch (err) {
+      console.log('Failed to pick audio', err);
     }
   };
 
@@ -626,7 +671,7 @@ export default function PatientDashboard() {
                <Text style={styles.subtitle}>{t('Patient ID:')} {userInfo?.id}</Text>
              </View>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <TouchableOpacity style={styles.settingsBtn} onPress={() => setSettingsModalVisible(true)}>
               <Text style={styles.settingsBtnText}>⚙️ Routine & Ringtone</Text>
             </TouchableOpacity>
@@ -706,7 +751,7 @@ export default function PatientDashboard() {
       <Modal visible={activeAlarms.length > 0} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={{fontSize: 40, marginBottom: 16}}>⏰</Text>
+            <Text style={{fontSize: 44, marginBottom: 12}}>⏰</Text>
             <Text style={styles.modalTitle}>{t('Medication Time!')}</Text>
             
             <ScrollView style={{ width: '100%', maxHeight: 220 }} contentContainerStyle={{ alignItems: 'center' }}>
@@ -720,7 +765,7 @@ export default function PatientDashboard() {
             </ScrollView>
 
             <TouchableOpacity style={styles.dismissButton} onPress={handleDismissAlarm}>
-               <Text style={styles.dismissText}>{t("OK, I've taken it!")}</Text>
+               <Text style={styles.dismissText}>{t("✓ OK, I've taken it!")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -731,7 +776,7 @@ export default function PatientDashboard() {
         <View style={styles.modalOverlay}>
           <View style={styles.routineModalContent}>
             <Text style={styles.routineModalTitle}>Welcome! Set Your Daily Routine ☀️</Text>
-            <Text style={styles.routineModalSub}>Please set your usual meal times so MedTrack can schedule your alarms accurately (e.g. 30 mins after breakfast).</Text>
+            <Text style={styles.routineModalSub}>Please set your usual meal times so MedTrack can schedule your medication alarms accurately.</Text>
 
             <Text style={styles.routineLabel}>Breakfast Time (HH:MM)</Text>
             <TextInput 
@@ -739,6 +784,7 @@ export default function PatientDashboard() {
               value={routine.breakfast_time} 
               onChangeText={(val) => setRoutine({ ...routine, breakfast_time: val })} 
               placeholder="08:00" 
+              placeholderTextColor="#64748B"
             />
 
             <Text style={styles.routineLabel}>Lunch Time (HH:MM)</Text>
@@ -746,7 +792,8 @@ export default function PatientDashboard() {
               style={styles.routineInput} 
               value={routine.lunch_time} 
               onChangeText={(val) => setRoutine({ ...routine, lunch_time: val })} 
-              placeholder="13:00" 
+              placeholder="13:30" 
+              placeholderTextColor="#64748B"
             />
 
             <Text style={styles.routineLabel}>Dinner Time (HH:MM)</Text>
@@ -754,7 +801,8 @@ export default function PatientDashboard() {
               style={styles.routineInput} 
               value={routine.dinner_time} 
               onChangeText={(val) => setRoutine({ ...routine, dinner_time: val })} 
-              placeholder="20:00" 
+              placeholder="20:30" 
+              placeholderTextColor="#64748B"
             />
 
             <Text style={styles.routineLabel}>Bedtime (HH:MM)</Text>
@@ -763,6 +811,7 @@ export default function PatientDashboard() {
               value={routine.bedtime} 
               onChangeText={(val) => setRoutine({ ...routine, bedtime: val })} 
               placeholder="22:00" 
+              placeholderTextColor="#64748B"
             />
 
             <TouchableOpacity style={styles.saveRoutineBtn} onPress={() => handleSaveRoutine(true)} disabled={savingRoutine}>
@@ -772,24 +821,25 @@ export default function PatientDashboard() {
         </View>
       </Modal>
 
-      {/* Routine & Settings Modal */}
+      {/* Routine & Settings Modal (Properly Aligned Card Layout) */}
       <Modal visible={settingsModalVisible} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <View style={styles.routineModalContent}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 12 }}>
-                <Text style={styles.routineModalTitle}>⚙️ Routine & Alarm Settings</Text>
-                <TouchableOpacity onPress={() => { stopSound(); setSettingsModalVisible(false); }}>
-                  <Text style={{ fontSize: 20, color: COLORS.textSecondary, fontWeight: 'bold' }}>✕</Text>
-                </TouchableOpacity>
-              </View>
+          <View style={styles.routineModalCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.routineModalTitle}>⚙️ Routine & Alarm Settings</Text>
+              <TouchableOpacity onPress={() => { stopSound(); setSettingsModalVisible(false); }}>
+                <Text style={styles.closeModalCross}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
               <Text style={styles.routineLabel}>Breakfast Time (HH:MM)</Text>
               <TextInput 
                 style={styles.routineInput} 
                 value={routine.breakfast_time} 
                 onChangeText={(val) => setRoutine({ ...routine, breakfast_time: val })} 
                 placeholder="08:00" 
+                placeholderTextColor="#64748B"
               />
 
               <Text style={styles.routineLabel}>Lunch Time (HH:MM)</Text>
@@ -797,7 +847,8 @@ export default function PatientDashboard() {
                 style={styles.routineInput} 
                 value={routine.lunch_time} 
                 onChangeText={(val) => setRoutine({ ...routine, lunch_time: val })} 
-                placeholder="13:00" 
+                placeholder="13:30" 
+                placeholderTextColor="#64748B"
               />
 
               <Text style={styles.routineLabel}>Dinner Time (HH:MM)</Text>
@@ -805,7 +856,8 @@ export default function PatientDashboard() {
                 style={styles.routineInput} 
                 value={routine.dinner_time} 
                 onChangeText={(val) => setRoutine({ ...routine, dinner_time: val })} 
-                placeholder="20:00" 
+                placeholder="20:30" 
+                placeholderTextColor="#64748B"
               />
 
               <Text style={styles.routineLabel}>Bedtime (HH:MM)</Text>
@@ -814,32 +866,35 @@ export default function PatientDashboard() {
                 value={routine.bedtime} 
                 onChangeText={(val) => setRoutine({ ...routine, bedtime: val })} 
                 placeholder="22:00" 
+                placeholderTextColor="#64748B"
               />
 
               <Text style={styles.routineLabel}>Select Global Ringtone 🎵</Text>
-              <View style={{ width: '100%', marginBottom: 12 }}>
-                {RINGTONE_OPTIONS.map((opt) => {
-                  const selected = routine.ringtone_uri === opt.value;
-                  return (
-                    <TouchableOpacity 
-                      key={opt.value} 
-                      style={[styles.ringtoneOption, selected && styles.ringtoneOptionActive]}
-                      onPress={() => {
-                        setRoutine({ ...routine, ringtone_uri: opt.value });
-                        testRingtone(opt.value);
-                      }}
-                    >
-                      <Text style={[styles.ringtoneText, selected && styles.ringtoneTextActive]}>{selected ? '✓ ' : ''}{opt.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+              <View style={{ marginBottom: 12 }}>
+                <TouchableOpacity 
+                  style={[styles.ringtoneOption, (routine.ringtone_uri === 'default' || !routine.ringtone_uri) && styles.ringtoneOptionActive]}
+                  onPress={() => setRoutine({ ...routine, ringtone_uri: 'default' })}
+                >
+                  <Text style={[styles.ringtoneText, (routine.ringtone_uri === 'default' || !routine.ringtone_uri) && styles.ringtoneTextActive]}>
+                    {(routine.ringtone_uri === 'default' || !routine.ringtone_uri) ? '✓ ' : ''}Default Beep 🔔
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.ringtoneOption, routine.ringtone_uri !== 'default' && routine.ringtone_uri !== '' && styles.ringtoneOptionActive]}
+                  onPress={handlePickRingtone}
+                >
+                  <Text style={[styles.ringtoneText, routine.ringtone_uri !== 'default' && routine.ringtone_uri !== '' && styles.ringtoneTextActive]}>
+                    {routine.ringtone_uri !== 'default' && routine.ringtone_uri !== '' ? '✓ Custom Audio: ' + (customRingtoneName || 'Selected') : '🎵 Upload Custom Ringtone'}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               <TouchableOpacity style={styles.saveRoutineBtn} onPress={() => handleSaveRoutine(false)} disabled={savingRoutine}>
                 {savingRoutine ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveRoutineBtnText}>Save Changes</Text>}
               </TouchableOpacity>
-            </View>
-          </ScrollView>
+            </ScrollView>
+          </View>
         </View>
       </Modal>
 
@@ -966,19 +1021,19 @@ const styles = StyleSheet.create({
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
   settingsBtn: {
     backgroundColor: '#EEF2FF',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#C7D2FE'
   },
-  settingsBtnText: { color: COLORS.primary, fontWeight: '600', fontSize: 13 },
+  settingsBtnText: { color: COLORS.primary, fontWeight: '700', fontSize: 13 },
   logoutBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: COLORS.error,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   logoutText: { color: COLORS.error, fontWeight: '600' },
   tabContainer: {
@@ -1066,10 +1121,10 @@ const styles = StyleSheet.create({
   disclaimer: { fontSize: 12, color: COLORS.textSecondary, italic: true },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
   },
   modalContent: {
     backgroundColor: COLORS.surface,
@@ -1092,26 +1147,39 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   dismissText: { ...TYPOGRAPHY.button },
-  routineModalContent: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
+  routineModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    width: '94%',
     maxWidth: 400,
-    ...SHADOWS.large
+    maxHeight: '85%',
+    alignSelf: 'center',
+    ...SHADOWS.large,
   },
-  routineModalTitle: { ...TYPOGRAPHY.h2, color: COLORS.primary, marginBottom: 8 },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 10,
+  },
+  routineModalTitle: { fontSize: 20, fontWeight: '700', color: COLORS.primary },
+  closeModalCross: { fontSize: 22, color: '#64748B', fontWeight: 'bold', padding: 4 },
   routineModalSub: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginBottom: 16 },
-  routineLabel: { fontSize: 13, fontWeight: '700', color: COLORS.text, marginBottom: 4, marginTop: 8 },
+  routineLabel: { fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 6, marginTop: 10 },
   routineInput: {
     backgroundColor: '#F8FAFC',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#CBD5E1',
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
-    color: COLORS.text,
+    color: '#0F172A',
+    width: '100%',
   },
   saveRoutineBtn: {
     backgroundColor: COLORS.primary,
@@ -1119,22 +1187,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 20,
+    width: '100%',
   },
   saveRoutineBtnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
   ringtoneOption: {
     backgroundColor: '#F8FAFC',
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginTop: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    marginTop: 8,
+    width: '100%',
   },
   ringtoneOptionActive: {
     backgroundColor: '#E0F2FE',
     borderColor: COLORS.primary,
   },
-  ringtoneText: { fontSize: 14, color: '#334155', fontWeight: '500' },
+  ringtoneText: { fontSize: 14, color: '#334155', fontWeight: '600' },
   ringtoneTextActive: { color: COLORS.primary, fontWeight: '700' },
   calendarModalContent: {
     backgroundColor: '#FFF',

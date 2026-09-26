@@ -1,10 +1,19 @@
-require("dotenv").config();
-const { Pool } = require("pg");
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+require('dotenv').config();
+const pool = require('./src/utils/db');
 
-async function clear() {
-  await pool.query("TRUNCATE TABLE users, prescriptions, doctor_patients, medicines CASCADE");
-  console.log("Database perfectly cleared for demo!");
-  pool.end();
+async function clearDatabase() {
+  try {
+    console.log("Clearing all tables in PostgreSQL database...");
+    await pool.query(`
+      TRUNCATE prescriptions, medicines, clinic_inventory, medicine_intakes, users RESTART IDENTITY CASCADE;
+    `);
+    console.log("✓ Database cleared completely! All tables purged.");
+  } catch (err) {
+    console.error("Error clearing database:", err.message);
+  } finally {
+    await pool.end();
+    process.exit(0);
+  }
 }
-clear();
+
+clearDatabase();

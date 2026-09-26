@@ -110,22 +110,81 @@ const searchInventory = async (doctorId, queryStr) => {
   return result.rows;
 };
 
-const deductStock = async (doctorId, medicineName, qty = 1) => {
+const deductStock = async (doctorId, medDetails) => {
   try {
-    const rawName = (medicineName || '').trim();
+    const { medicine_name, dosage, medicine_form, duration_days, custom_times, meal_slots, frequency_per_day } = typeof medDetails === 'object' ? medDetails : { medicine_name: medDetails };
+    const rawName = (medicine_name || '').trim();
     const baseName = rawName.split('(')[0].trim();
-    const result = await pool.query(
-      `UPDATE clinic_inventory 
-       SET stock_quantity = GREATEST(0, stock_quantity - $3)
+
+    // Find matching inventory item
+    const findRes = await pool.query(
+      `SELECT * FROM clinic_inventory 
        WHERE doctor_id = $1 AND (
          LOWER(TRIM(medicine_name)) = LOWER(TRIM($2)) OR
-         LOWER(TRIM(medicine_name)) = LOWER(TRIM($4)) OR
+         LOWER(TRIM(medicine_name)) = LOWER(TRIM($3)) OR
          LOWER(TRIM($2)) LIKE LOWER(CONCAT(TRIM(medicine_name), '%'))
        )
-       RETURNING *`,
-      [doctorId, rawName, qty, baseName]
+       LIMIT 1`,
+      [doctorId, rawName, baseName]
     );
-    return result.rows[0] || null;
+
+    if (findRes.rows.length === 0) return null;
+
+    const invItem = findRes.rows[0];
+    const form = invItem.form || medicine_form || 'Tablet';
+    const strengthStr = invItem.strength || '';
+
+    // Calculate prescribed dosage number per intake (e.g. "10ml" -> 10, "1 Tablet" -> 1, "2 Tablets" -> 2)
+    let dosagePerIntake = 1;
+    const dosageMatch = (dosage || '').toString().match(/(\d+(\.\d+)?)/);
+    if (dosageMatch) {
+      dosagePerIntake = parseFloat(dosageMatch[1]) || 1;
+    }
+
+    // Calculate intakes per day
+    let intakesPerDay = 1;
+    if (Array.isArray(meal_slots) && meal_slots.length > 0) {
+      intakesPerDay = meal_slots.length;
+    } else if (Array.isArray(custom_times) && custom_times.length > 0) {
+      intakesPerDay = custom_times.length;
+    } else if (frequency_per_day) {
+      intakesPerDay = parseInt(frequency_per_day, 10) || 1;
+    }
+
+    const duration = parseInt(duration_days || '7', 10) || 7;
+    const totalPrescribedAmount = dosagePerIntake * intakesPerDay * duration;
+
+    let unitsToDeduct = 1;
+
+    if (form === 'Syrup' || form === 'Drops' || form === 'Ointment') {
+      let packSize = 50; // Default 50ml bottle
+      const sizeMatch = strengthStr.match(/(\d+(\.\d+)?)\s*(ml|g)/i);
+      if (sizeMatch) {
+        packSize = parseFloat(sizeMatch[1]) || 50;
+      }
+      unitsToDeduct = Math.ceil(totalPrescribedAmount / packSize);
+    } else if (form === 'Tablet' || form === 'Capsule') {
+      let stripSize = 10; // Default 10 tablets per strip/pack
+      const stripMatch = strengthStr.match(/(\d+)\s*(tab|strip|cap)/i);
+      if (stripMatch) {
+        stripSize = parseInt(stripMatch[1], 10) || 10;
+      }
+      unitsToDeduct = Math.ceil(totalPrescribedAmount / stripSize);
+    } else {
+      unitsToDeduct = Math.ceil(totalPrescribedAmount);
+    }
+
+    if (unitsToDeduct < 1) unitsToDeduct = 1;
+
+    const updateRes = await pool.query(
+      `UPDATE clinic_inventory 
+       SET stock_quantity = GREATEST(0, stock_quantity - $2)
+       WHERE id = $1
+       RETURNING *`,
+      [invItem.id, unitsToDeduct]
+    );
+
+    return updateRes.rows[0] || null;
   } catch (err) {
     console.error("Deduct stock error:", err.message);
     return null;

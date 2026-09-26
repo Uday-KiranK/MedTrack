@@ -233,6 +233,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.border,
     ...TYPOGRAPHY.body,
+    color: '#0F172A',
   },
   button: {
     backgroundColor: COLORS.primary,

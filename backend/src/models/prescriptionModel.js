@@ -70,7 +70,7 @@ const addMedicine = async (data) => {
       const pRes = await pool.query(`SELECT doctor_id FROM prescriptions WHERE id = $1`, [prescription_id]);
       if (pRes.rows.length > 0) {
         const doctorId = pRes.rows[0].doctor_id;
-        await deductStock(doctorId, medicine_name, total_units);
+        await deductStock(doctorId, insertedMed);
       }
     } catch (e) {
       console.error("Auto deduct stock error:", e.message);
