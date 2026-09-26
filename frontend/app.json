@@ -47,7 +47,8 @@
           "icon": "./assets/icon.png",
           "color": "#1A9988",
           "sounds": [
-            "./assets/alarm.wav"
+            "./assets/alarm.wav",
+            "./assets/alarm_loop.wav"
           ]
         }
       ]

@@ -108,12 +108,12 @@ export default function PatientDashboard() {
       }
 
       if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('medtrack-medication-alarms-v2', {
-          name: 'MedTrack Medication Alarms',
+        await Notifications.setNotificationChannelAsync('medtrack-medication-alarms-v3', {
+          name: 'MedTrack Medication Alarms v3',
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 500, 500, 500],
           lightColor: '#1A9988',
-          sound: 'alarm.wav',
+          sound: 'alarm_loop.wav',
           lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
           bypassDnd: true,
           audioAttributes: {
@@ -286,13 +286,13 @@ export default function PatientDashboard() {
             player.loop = true;
             player.play();
           } catch (audioErr) {
-            console.log("Custom ringtone load error, falling back to default alarm.wav", audioErr);
+            console.log("Custom ringtone load error, falling back to default alarm_loop.wav", audioErr);
             player = null;
           }
         }
         if (!player) {
           try {
-            player = createAudioPlayer(require('../../assets/alarm.wav'));
+            player = createAudioPlayer(require('../../assets/alarm_loop.wav'));
             player.loop = true;
             player.play();
           } catch (audioErr) {
@@ -302,7 +302,7 @@ export default function PatientDashboard() {
         soundRef.current = player;
       } else if (typeof window !== 'undefined' && window.Audio) {
         try {
-          const alarmWav = require('../../assets/alarm.wav');
+          const alarmWav = require('../../assets/alarm_loop.wav');
           const webAudio = new window.Audio(typeof alarmWav === 'string' ? alarmWav : (alarmWav?.uri || customUri));
           webAudio.loop = true;
           webAudio.play().catch(e => console.log("Web audio error", e));
@@ -584,9 +584,9 @@ export default function PatientDashboard() {
               content: {
                 title,
                 body,
-                sound: 'alarm.wav',
+                sound: 'alarm_loop.wav',
                 priority: Notifications.AndroidNotificationPriority.MAX,
-                channelId: 'medtrack-medication-alarms-v2',
+                channelId: 'medtrack-medication-alarms-v3',
                 categoryIdentifier: 'MED_ALARM_CATEGORY',
                 data: { medicineId: med.id },
                 sticky: true,
@@ -595,7 +595,7 @@ export default function PatientDashboard() {
                 type: Notifications.SchedulableTriggerInputTypes.DAILY,
                 hour,
                 minute,
-                channelId: 'medtrack-medication-alarms-v2',
+                channelId: 'medtrack-medication-alarms-v3',
               },
             });
           } else {
@@ -612,9 +612,9 @@ export default function PatientDashboard() {
                   content: {
                     title,
                     body,
-                    sound: 'alarm.wav',
+                    sound: 'alarm_loop.wav',
                     priority: Notifications.AndroidNotificationPriority.MAX,
-                    channelId: 'medtrack-medication-alarms-v2',
+                    channelId: 'medtrack-medication-alarms-v3',
                     categoryIdentifier: 'MED_ALARM_CATEGORY',
                     data: { medicineId: med.id },
                     sticky: true,
@@ -622,7 +622,7 @@ export default function PatientDashboard() {
                   trigger: {
                     type: Notifications.SchedulableTriggerInputTypes.DATE,
                     date: targetDate,
-                    channelId: 'medtrack-medication-alarms-v2',
+                    channelId: 'medtrack-medication-alarms-v3',
                   },
                 });
                 break;
