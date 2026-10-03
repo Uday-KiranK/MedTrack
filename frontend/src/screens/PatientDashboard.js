@@ -47,6 +47,7 @@ export default function PatientDashboard() {
   const [medicineDetails, setMedicineDetails] = useState(null);
   const [loadingMedInfo, setLoadingMedInfo] = useState(false);
   const [isSpeakingInfo, setIsSpeakingInfo] = useState(false);
+  const [dismissPermissionBanner, setDismissPermissionBanner] = useState(false);
 
   // Patient Routine state
   const [routine, setRoutine] = useState({
@@ -729,27 +730,31 @@ export default function PatientDashboard() {
     }
   };
 
-  const handleOpenMedicineInfo = async (med) => {
+  const handleOpenMedicineInfo = (med) => {
+    if (!med) return;
+    // Set clinical fallback immediately so modal opens with 0ms delay!
+    const fallback = getMedicineInfoDetails(med);
     setSelectedMedicineInfo(med);
-    setMedicineDetails(null);
+    setMedicineDetails(fallback);
     setLoadingMedInfo(true);
     setIsSpeakingInfo(false);
 
-    try {
-      const res = await axios.get(`${API_URL}/prescriptions/medicine-info`, {
-        params: {
-          name: med.medicine_name,
-          form: med.medicine_form || 'Tablet',
-          dosage: med.dosage || ''
-        }
-      });
-      setMedicineDetails(res.data);
-    } catch (err) {
-      console.log("Fetch medicine info error:", err);
-      setMedicineDetails(getMedicineInfoDetails(med));
-    } finally {
+    axios.get(`${API_URL}/prescriptions/medicine-info`, {
+      params: {
+        name: med.medicine_name,
+        form: med.medicine_form || 'Tablet',
+        dosage: med.dosage || ''
+      },
+      timeout: 10000
+    }).then((res) => {
+      if (res.data) {
+        setMedicineDetails(res.data);
+      }
+    }).catch((err) => {
+      console.log("Fetch medicine info background note:", err.message);
+    }).finally(() => {
       setLoadingMedInfo(false);
-    }
+    });
   };
 
   const handleCloseMedicineInfo = () => {
@@ -892,37 +897,31 @@ export default function PatientDashboard() {
               keyExtractor={(item) => item.id.toString()}
               ListHeaderComponent={
                 <View>
-                  {!hasNotificationPermission && (
+                  {!hasNotificationPermission && !dismissPermissionBanner && (
                     <View style={styles.permissionWarningCard}>
-                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                        <Text style={{ fontSize: 26 }}>🚨</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.permissionWarningTitle}>Background Medication Alarms Disabled!</Text>
-                          <Text style={styles.permissionWarningSub}>
-                            Android Notification & Alarm permissions are turned OFF. Your medication alarms will NOT ring when your app is closed or screen is locked until enabled.
-                          </Text>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, flex: 1 }}>
+                          <Text style={{ fontSize: 26 }}>🚨</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.permissionWarningTitle}>Background Medication Alarms</Text>
+                            <Text style={styles.permissionWarningSub}>
+                              {isExpoGo 
+                                ? 'Running in Expo Go (Dev Mode). For background alarms when screen is locked or app is closed, use the compiled APK.'
+                                : 'Notification & Alarm permissions are turned OFF. Enable permissions to receive timely alarms.'}
+                            </Text>
+                          </View>
                         </View>
+                        <TouchableOpacity 
+                          onPress={() => setDismissPermissionBanner(true)} 
+                          style={{ padding: 4, marginLeft: 8 }}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Text style={{ fontSize: 18, color: '#991B1B', fontWeight: 'bold' }}>✕</Text>
+                        </TouchableOpacity>
                       </View>
                       <TouchableOpacity style={styles.enablePermissionBtn} onPress={handleEnablePermissions}>
                         <Text style={styles.enablePermissionBtnText}>⚡ Enable Alarm Permissions & Settings</Text>
                       </TouchableOpacity>
-                    </View>
-                  )}
-
-                  {hasNotificationPermission && (
-                    <View style={styles.permissionInfoCard}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={{ fontSize: 18 }}>⏰</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.permissionInfoTitle}>Exact Alarms Active (setExactAndAllowWhileIdle)</Text>
-                          <Text style={styles.permissionInfoSub}>
-                            For 100% reliable background ringing when screen is off, verify "Alarms & Reminders" is ON in App Info.
-                          </Text>
-                        </View>
-                        <TouchableOpacity style={styles.checkSettingsBtn} onPress={handleOpenSettings}>
-                          <Text style={styles.checkSettingsBtnText}>⚙️ Check Settings</Text>
-                        </TouchableOpacity>
-                      </View>
                     </View>
                   )}
                 </View>
@@ -1032,9 +1031,21 @@ export default function PatientDashboard() {
       </View>
 
       {/* Feature 3: Patient Medicine Info Modal */}
-      <Modal visible={!!selectedMedicineInfo} transparent={true} animationType="slide">
+      <Modal 
+        visible={!!selectedMedicineInfo} 
+        transparent={true} 
+        animationType="slide"
+        onRequestClose={handleCloseMedicineInfo}
+      >
         <View style={styles.modalOverlay}>
-          <View style={styles.routineModalCard}>
+          {/* Backdrop touchable to close */}
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill} 
+            activeOpacity={1} 
+            onPress={handleCloseMedicineInfo} 
+          />
+
+          <View style={styles.medicineInfoCard}>
             {selectedMedicineInfo && (() => {
               const info = medicineDetails || getMedicineInfoDetails(selectedMedicineInfo);
               return (
@@ -1046,86 +1057,89 @@ export default function PatientDashboard() {
                         {info?.generic_name ? `Salt: ${info.generic_name}` : `${selectedMedicineInfo.dosage} • ${selectedMedicineInfo.medicine_form || 'Tablet'}`}
                       </Text>
                     </View>
-                    <TouchableOpacity onPress={handleCloseMedicineInfo}>
+                    <TouchableOpacity 
+                      onPress={handleCloseMedicineInfo}
+                      style={styles.closeBtnCircle}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    >
                       <Text style={styles.closeModalCross}>✕</Text>
                     </TouchableOpacity>
                   </View>
 
-                  {loadingMedInfo ? (
-                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
-                      <ActivityIndicator size="large" color={COLORS.primary} />
-                      <Text style={{ marginTop: 14, color: COLORS.primary, fontWeight: '700', fontSize: 15, textAlign: 'center' }}>
-                        🤖 Analyzing Medical Info & Composition...
+                  {loadingMedInfo && !medicineDetails?.isAiGenerated ? (
+                    <View style={styles.aiLoadingBanner}>
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                      <Text style={styles.aiLoadingText}>🤖 AI verifying clinical composition...</Text>
+                    </View>
+                  ) : null}
+
+                  <ScrollView 
+                    style={{ flex: 1 }}
+                    showsVerticalScrollIndicator={true} 
+                    contentContainerStyle={{ paddingBottom: 24 }}
+                  >
+                    <TouchableOpacity 
+                      style={[styles.speechBtn, isSpeakingInfo && styles.speechBtnActive]}
+                      onPress={() => handleSpeechInfo(info, selectedMedicineInfo)}
+                    >
+                      <Text style={[styles.speechBtnText, isSpeakingInfo && styles.speechBtnTextActive]}>
+                        {isSpeakingInfo ? '🛑 Stop Reading' : '🔊 Listen Audio Instructions'}
                       </Text>
-                      <Text style={{ marginTop: 6, color: COLORS.textSecondary, fontSize: 12 }}>
-                        Fetching clinical details, food relationships & warnings
+                    </TouchableOpacity>
+
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>🎯 Primary Uses & Purpose</Text>
+                      <Text style={styles.infoBoxText}>{info?.uses}</Text>
+                    </View>
+
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>🕒 How & When to Take</Text>
+                      <Text style={styles.infoBoxText}>{info?.howToTake || info?.how_to_take}</Text>
+                      <Text style={[styles.infoBoxText, { marginTop: 6, fontWeight: '700', color: COLORS.primary }]}>
+                        Doctor's Instruction: {selectedMedicineInfo.food_instruction || 'After Food'} (~10 min gap)
                       </Text>
                     </View>
-                  ) : (
-                    <ScrollView showsVerticalScrollIndicator={true} contentContainerStyle={{ paddingBottom: 24 }}>
-                      <TouchableOpacity 
-                        style={[styles.speechBtn, isSpeakingInfo && styles.speechBtnActive]}
-                        onPress={() => handleSpeechInfo(info, selectedMedicineInfo)}
-                      >
-                        <Text style={[styles.speechBtnText, isSpeakingInfo && styles.speechBtnTextActive]}>
-                          {isSpeakingInfo ? '🛑 Stop Reading' : '🔊 Listen Audio Instructions'}
-                        </Text>
-                      </TouchableOpacity>
 
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>⚠️ Common Side Effects & Red Flags</Text>
+                      <Text style={styles.infoBoxText}>{info?.sideEffects || info?.side_effects}</Text>
+                    </View>
+
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>🛡️ Precautions & Warnings</Text>
+                      <Text style={styles.infoBoxText}>{info?.precautions}</Text>
+                    </View>
+
+                    {(info?.dietaryAdvice || info?.dietary_advice) ? (
                       <View style={styles.infoBox}>
-                        <Text style={styles.infoBoxTitle}>🎯 Primary Uses & Purpose</Text>
-                        <Text style={styles.infoBoxText}>{info?.uses}</Text>
+                        <Text style={styles.infoBoxTitle}>🥗 Dietary & Lifestyle Advice</Text>
+                        <Text style={styles.infoBoxText}>{info?.dietaryAdvice || info?.dietary_advice}</Text>
                       </View>
+                    ) : null}
 
+                    {(info?.missedDose || info?.missed_dose) ? (
                       <View style={styles.infoBox}>
-                        <Text style={styles.infoBoxTitle}>🕒 How & When to Take</Text>
-                        <Text style={styles.infoBoxText}>{info?.howToTake || info?.how_to_take}</Text>
-                        <Text style={[styles.infoBoxText, { marginTop: 6, fontWeight: '700', color: COLORS.primary }]}>
-                          Doctor's Instruction: {selectedMedicineInfo.food_instruction || 'After Food'} (~10 min gap)
-                        </Text>
+                        <Text style={styles.infoBoxTitle}>⏰ Missed Dose Guidance</Text>
+                        <Text style={styles.infoBoxText}>{info?.missedDose || info?.missed_dose}</Text>
                       </View>
+                    ) : null}
 
-                      <View style={styles.infoBox}>
-                        <Text style={styles.infoBoxTitle}>⚠️ Common Side Effects & Red Flags</Text>
-                        <Text style={styles.infoBoxText}>{info?.sideEffects || info?.side_effects}</Text>
-                      </View>
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>📦 Storage Instructions</Text>
+                      <Text style={styles.infoBoxText}>{info?.storage}</Text>
+                    </View>
 
-                      <View style={styles.infoBox}>
-                        <Text style={styles.infoBoxTitle}>🛡️ Precautions & Warnings</Text>
-                        <Text style={styles.infoBoxText}>{info?.precautions}</Text>
-                      </View>
+                    <Text style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginVertical: 8, fontStyle: 'italic' }}>
+                      Note: Informational medical insights. Always follow your physician's specific instructions.
+                    </Text>
 
-                      {(info?.dietaryAdvice || info?.dietary_advice) ? (
-                        <View style={styles.infoBox}>
-                          <Text style={styles.infoBoxTitle}>🥗 Dietary & Lifestyle Advice</Text>
-                          <Text style={styles.infoBoxText}>{info?.dietaryAdvice || info?.dietary_advice}</Text>
-                        </View>
-                      ) : null}
-
-                      {(info?.missedDose || info?.missed_dose) ? (
-                        <View style={styles.infoBox}>
-                          <Text style={styles.infoBoxTitle}>⏰ Missed Dose Guidance</Text>
-                          <Text style={styles.infoBoxText}>{info?.missedDose || info?.missed_dose}</Text>
-                        </View>
-                      ) : null}
-
-                      <View style={styles.infoBox}>
-                        <Text style={styles.infoBoxTitle}>📦 Storage Instructions</Text>
-                        <Text style={styles.infoBoxText}>{info?.storage}</Text>
-                      </View>
-
-                      <Text style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginVertical: 8, fontStyle: 'italic' }}>
-                        Note: Informational AI-assisted content. Not a substitute for professional medical advice.
-                      </Text>
-
-                      <TouchableOpacity 
-                        style={[styles.saveRoutineBtn, { marginTop: 8 }]} 
-                        onPress={handleCloseMedicineInfo}
-                      >
-                        <Text style={styles.saveRoutineBtnText}>✓ Got it, Thanks!</Text>
-                      </TouchableOpacity>
-                    </ScrollView>
-                  )}
+                    <TouchableOpacity 
+                      style={[styles.saveRoutineBtn, { marginTop: 8 }]} 
+                      onPress={handleCloseMedicineInfo}
+                    >
+                      <Text style={styles.saveRoutineBtnText}>✓ Got it, Close</Text>
+                    </TouchableOpacity>
+                  </ScrollView>
                 </View>
               );
             })()}
@@ -1708,9 +1722,48 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '92%',
     maxWidth: 450,
-    maxHeight: '85%',
+    height: '82%',
+    maxHeight: '88%',
     alignSelf: 'center',
     ...SHADOWS.large,
+  },
+  medicineInfoCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    width: '92%',
+    maxWidth: 450,
+    height: '82%',
+    maxHeight: '88%',
+    alignSelf: 'center',
+    overflow: 'hidden',
+    ...SHADOWS.large,
+    elevation: 20,
+    zIndex: 100,
+  },
+  closeBtnCircle: {
+    backgroundColor: '#F1F5F9',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiLoadingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 10,
+  },
+  aiLoadingText: {
+    fontSize: 12,
+    color: '#0D9488',
+    fontWeight: '600',
   },
   modalHeaderRow: {
     flexDirection: 'row',
