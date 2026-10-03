@@ -9,17 +9,26 @@ const createUser = async (name, email, phone, password, role) => {
 };
 
 const findUserByEmail = async (email) => {
+  if (!email) return null;
   const result = await pool.query(
-    "SELECT * FROM users WHERE email=$1",
-    [email]
+    "SELECT * FROM users WHERE LOWER(email) = LOWER($1)",
+    [email.trim()]
   );
   return result.rows[0];
 };
 
 const findUserByPhone = async (phone) => {
+  if (!phone) return null;
+  const cleanInput = phone.toString().trim();
+  const digitsOnly = cleanInput.replace(/\D/g, '');
+  const last10 = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+
   const result = await pool.query(
-    "SELECT * FROM users WHERE phone=$1",
-    [phone]
+    `SELECT * FROM users 
+     WHERE phone = $1 
+        OR REGEXP_REPLACE(phone, '\\D', '', 'g') = $2 
+        OR RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 10) = $3`,
+    [cleanInput, digitsOnly, last10]
   );
   return result.rows[0];
 };
