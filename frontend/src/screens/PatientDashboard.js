@@ -942,11 +942,10 @@ export default function PatientDashboard() {
     }
   }, [i18n.language]);
 
-  const handleSearchCustomMedicine = (query, chosenForm = null) => {
+  const handleSearchCustomMedicine = (query) => {
     if (!query || !query.trim()) return;
     const cleanQuery = query.trim();
-    const detectedForm = chosenForm || detectFormFromText(cleanQuery, activeTabMed?.medicine_form || 'Tablet');
-    const mockMed = { medicine_name: cleanQuery, dosage: '', medicine_form: detectedForm };
+    const mockMed = { medicine_name: cleanQuery, dosage: '' };
     setActiveTabMed(mockMed);
     stopSpeech();
     setTabMedInfo(null);
@@ -955,7 +954,7 @@ export default function PatientDashboard() {
     axios.get(`${API_URL}/prescriptions/medicine-info`, {
       params: {
         name: cleanQuery,
-        form: detectedForm,
+        form: '',
         dosage: '',
         lang: i18n.language || 'en'
       },
@@ -963,11 +962,12 @@ export default function PatientDashboard() {
     }).then((res) => {
       if (res.data) {
         setTabMedInfo(res.data);
-        const resolvedForm = res.data.form || res.data.medicine_form || detectedForm;
-        setActiveTabMed(prev => ({
-          ...prev,
-          medicine_form: resolvedForm
-        }));
+        if (res.data.form || res.data.medicine_form) {
+          setActiveTabMed(prev => ({
+            ...prev,
+            medicine_form: res.data.form || res.data.medicine_form
+          }));
+        }
       }
     }).catch((err) => {
       console.log("Custom search medicine error:", err.message);
@@ -1239,40 +1239,6 @@ export default function PatientDashboard() {
               </TouchableOpacity>
             </View>
 
-            {/* Formulation Quick Filter Chips */}
-            <View style={{ marginBottom: 14 }}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
-                {[
-                  { key: 'Tablet', icon: '💊' },
-                  { key: 'Syrup', icon: '🥄' },
-                  { key: 'Capsule', icon: '💊' },
-                  { key: 'Drops', icon: '💧' },
-                  { key: 'Injection', icon: '💉' },
-                  { key: 'Ointment', icon: '🧴' },
-                ].map((item) => {
-                  const isFormActive = (activeTabMed?.medicine_form || '').toLowerCase() === item.key.toLowerCase();
-                  return (
-                    <TouchableOpacity
-                      key={item.key}
-                      style={[styles.formSelectChip, isFormActive && styles.formSelectChipActive]}
-                      onPress={() => {
-                        const targetName = activeTabMed?.medicine_name || searchMedQuery;
-                        if (targetName && targetName.trim()) {
-                          handleSearchCustomMedicine(targetName, item.key);
-                        } else {
-                          setActiveTabMed({ medicine_name: '', dosage: '', medicine_form: item.key });
-                        }
-                      }}
-                    >
-                      <Text style={[styles.formSelectChipText, isFormActive && styles.formSelectChipTextActive]}>
-                        {item.icon} {t(item.key)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
             {/* Prescribed for You Chips (Deduplicated) */}
             {(() => {
               const uniquePrescribedMeds = Array.from(
@@ -1310,23 +1276,26 @@ export default function PatientDashboard() {
                   <View style={styles.tabMedHeaderRow}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
                       <Text style={styles.tabMedTitle}>{activeTabMed.medicine_name}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                        <View style={styles.formBadge}>
-                          <Text style={styles.formBadgeText}>
-                            {activeTabMed.medicine_form === 'Syrup' ? '🥄 ' : activeTabMed.medicine_form === 'Drops' ? '💧 ' : activeTabMed.medicine_form === 'Capsule' ? '💊 ' : activeTabMed.medicine_form === 'Injection' ? '💉 ' : activeTabMed.medicine_form === 'Ointment' ? '🧴 ' : '💊 '}
-                            {t(activeTabMed.medicine_form || 'Tablet')}
-                          </Text>
-                        </View>
-                        {info?.generic_name ? (
-                          <Text style={styles.tabMedSub}>
-                            {t('Salt')}: {info.generic_name}
-                          </Text>
-                        ) : activeTabMed.dosage ? (
-                          <Text style={styles.tabMedSub}>
-                            {activeTabMed.dosage}
-                          </Text>
-                        ) : null}
-                      </View>
+                      
+                      {/* AI-determined Medicine Type */}
+                      {(info?.type || info?.medicine_form || info?.form) ? (
+                        <Text style={styles.tabMedTypeLine}>
+                          <Text style={{ fontWeight: '700', color: COLORS.primary }}>{t('Type')}: </Text>
+                          {info.type || t(info.medicine_form || info.form)}
+                        </Text>
+                      ) : null}
+
+                      {/* Salt / Active Composition */}
+                      {info?.generic_name ? (
+                        <Text style={styles.tabMedSub}>
+                          <Text style={{ fontWeight: '700' }}>{t('Salt')}: </Text>
+                          {info.generic_name}
+                        </Text>
+                      ) : activeTabMed.dosage ? (
+                        <Text style={styles.tabMedSub}>
+                          {activeTabMed.dosage}
+                        </Text>
+                      ) : null}
                     </View>
                     {info?.isAiGenerated ? (
                       <View style={styles.aiBadge}>
@@ -1485,23 +1454,26 @@ export default function PatientDashboard() {
                   <View style={styles.modalHeaderRow}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
                       <Text style={styles.routineModalTitle}>{selectedMedicineInfo.medicine_name}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                        <View style={styles.formBadge}>
-                          <Text style={styles.formBadgeText}>
-                            {selectedMedicineInfo.medicine_form === 'Syrup' ? '🥄 ' : selectedMedicineInfo.medicine_form === 'Drops' ? '💧 ' : selectedMedicineInfo.medicine_form === 'Capsule' ? '💊 ' : selectedMedicineInfo.medicine_form === 'Injection' ? '💉 ' : selectedMedicineInfo.medicine_form === 'Ointment' ? '🧴 ' : '💊 '}
-                            {t(selectedMedicineInfo.medicine_form || 'Tablet')}
-                          </Text>
-                        </View>
-                        {info?.generic_name ? (
-                          <Text style={styles.routineModalSub}>
-                            {t('Salt')}: {info.generic_name}
-                          </Text>
-                        ) : selectedMedicineInfo.dosage ? (
-                          <Text style={styles.routineModalSub}>
-                            {selectedMedicineInfo.dosage}
-                          </Text>
-                        ) : null}
-                      </View>
+                      
+                      {/* AI-determined Medicine Type */}
+                      {(info?.type || info?.medicine_form || info?.form) ? (
+                        <Text style={styles.tabMedTypeLine}>
+                          <Text style={{ fontWeight: '700', color: COLORS.primary }}>{t('Type')}: </Text>
+                          {info.type || t(info.medicine_form || info.form)}
+                        </Text>
+                      ) : null}
+
+                      {/* Salt / Generic Name */}
+                      {info?.generic_name ? (
+                        <Text style={styles.routineModalSub}>
+                          <Text style={{ fontWeight: '700' }}>{t('Salt')}: </Text>
+                          {info.generic_name}
+                        </Text>
+                      ) : selectedMedicineInfo.dosage ? (
+                        <Text style={styles.routineModalSub}>
+                          {selectedMedicineInfo.dosage}
+                        </Text>
+                      ) : null}
                     </View>
                     <TouchableOpacity 
                       onPress={handleCloseMedicineInfo}
@@ -2352,39 +2324,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
-  formSelectChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  formSelectChipActive: {
-    backgroundColor: '#EEF2FF',
-    borderColor: COLORS.primary,
-  },
-  formSelectChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  formSelectChipTextActive: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  formBadge: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-    alignSelf: 'flex-start',
-  },
-  formBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.primary,
+  tabMedTypeLine: {
+    fontSize: 13,
+    color: '#334155',
+    marginTop: 4,
+    fontWeight: '500',
   },
 });

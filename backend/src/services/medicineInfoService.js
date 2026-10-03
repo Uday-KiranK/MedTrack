@@ -123,9 +123,18 @@ function getRuleBasedFallback(medicineName, medicineForm = 'Tablet', dosage = ''
     dietaryAdvice = "Sip warm water, herbal teas, or honey-lemon water to soothe bronchial passages.";
   }
 
+  let type = effectiveForm;
+  if (effectiveForm === 'Syrup') type = 'Oral Syrup / Suspension';
+  else if (effectiveForm === 'Drops') type = 'Liquid Drops';
+  else if (effectiveForm === 'Capsule') type = 'Capsule';
+  else if (effectiveForm === 'Injection') type = 'Injectable Solution';
+  else if (effectiveForm === 'Ointment') type = 'Topical Ointment / Gel';
+  else type = 'Oral Tablet';
+
   return {
     found: true,
     medicine_name: medicineName,
+    type,
     medicine_form: effectiveForm,
     form: effectiveForm,
     generic_name,
@@ -145,7 +154,7 @@ async function translateWithSarvam(fieldsObj, targetLang) {
     return fieldsObj;
   }
 
-  const keys = ['uses', 'howToTake', 'sideEffects', 'precautions', 'dietaryAdvice', 'missedDose', 'storage'];
+  const keys = ['type', 'uses', 'howToTake', 'sideEffects', 'precautions', 'dietaryAdvice', 'missedDose', 'storage'];
   const textItems = keys.map(k => fieldsObj[k] || '');
   const joinedText = textItems.join('\n###\n');
 
@@ -202,7 +211,7 @@ async function fetchMedicineInfoFromAI(medicineName, medicineForm, dosage, lang 
   }
 
   const systemPrompt = `You are an expert clinical pharmacologist and medical database.
-Search live web information to identify the exact active chemical composition, true pharmaceutical formulation (Syrup, Tablet, Capsule, Drops, Injection, Ointment, etc.), and clinical uses for the requested medicine.
+Search live web information to identify the exact active chemical composition, true pharmaceutical formulation/type (e.g. Oral Syrup, Chewable Tablet, Effervescent Tablet, Liquid Drops, Topical Ointment, Capsule, Injection, etc.), and clinical uses for the requested medicine.
 
 CRITICAL NON-EXISTENT MEDICINE & HALLUCINATION GUARD:
 If the requested query "${medicineName}" is NOT a recognized pharmaceutical drug, brand, chemical salt, prescription medication, OTC product, or medical dietary supplement (e.g. random letters, non-medical words, fictional names):
@@ -210,7 +219,7 @@ You MUST return ONLY this JSON:
 {
   "found": false,
   "medicine_name": "${medicineName}",
-  "form": "N/A",
+  "type": "Not Found",
   "generic_name": "Not Found",
   "uses": "No matching pharmaceutical drug or supplement was found for '${medicineName}'. Please check the spelling on your medicine packaging or consult your doctor.",
   "howToTake": "N/A",
@@ -225,10 +234,10 @@ If it is a real medicine, return valid JSON with "found": true and this structur
 {
   "found": true,
   "medicine_name": "${medicineName}",
-  "form": "${effectiveForm}",
+  "type": "Exact pharmaceutical type/dosage form identified from search (e.g. Oral Syrup, Film-Coated Tablet, Capsule, Liquid Drops, Topical Gel, Suspension, Injection)",
   "generic_name": "Accurate active salt/ingredient composition (e.g. Calcium Carbonate 1250mg + Vitamin D3 250 IU)",
   "uses": "Clear, concise explanation of primary medical uses, conditions treated, and therapeutic benefits.",
-  "howToTake": "Detailed instructions on how to take/administer according to its form (for Syrup: measure liquid in ml using cup/spoon; for Tablet/Capsule: swallow whole with water; for Drops: instill drops as directed; for Ointment: apply thin layer), meal relationships, and optimal timing.",
+  "howToTake": "Detailed instructions on how to take/administer according to its formulation (for Syrup: measure in ml using measuring cup; for Tablet/Capsule: swallow whole with water; for Drops: instill drops as directed; for Ointment: apply thin layer), meal relationships, and optimal timing.",
   "sideEffects": "Common mild side effects and red-flag symptoms to watch out for.",
   "precautions": "Important medical warnings, contraindications, pregnancy/breastfeeding, alcohol.",
   "dietaryAdvice": "Foods, drinks, or lifestyle guidance that support or interfere with this medication.",
@@ -236,7 +245,7 @@ If it is a real medicine, return valid JSON with "found": true and this structur
   "storage": "Proper storage guidelines (temperature, moisture, child safety)."
 }`;
 
-  const userPrompt = `Provide accurate, live-verified pharmacology details for medicine: "${medicineName}" (Formulation: ${effectiveForm}, Dosage: ${dosage || 'as prescribed'}). Return JSON only.`;
+  const userPrompt = `Provide accurate, live-verified pharmacology details for medicine: "${medicineName}". Automatically determine its true pharmaceutical type and form from web search. Return JSON only.`;
 
   let response;
   try {
@@ -279,7 +288,8 @@ If it is a real medicine, return valid JSON with "found": true and this structur
   const parsed = JSON.parse(match[0]);
   parsed.isAiGenerated = true;
   parsed.lang = lang;
-  parsed.form = parsed.form || effectiveForm;
+  parsed.type = parsed.type || parsed.form || effectiveForm;
+  parsed.form = parsed.form || parsed.type || effectiveForm;
   parsed.medicine_form = parsed.form;
 
   // Translate to target regional language via Sarvam AI
@@ -287,6 +297,7 @@ If it is a real medicine, return valid JSON with "found": true and this structur
     const translated = await translateWithSarvam(parsed, lang);
     translated.isAiGenerated = true;
     translated.lang = lang;
+    translated.type = translated.type || parsed.type;
     translated.form = parsed.form;
     translated.medicine_form = parsed.form;
     return translated;
@@ -315,9 +326,11 @@ async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '
       const row = cached.rows[0];
       const raw = row.raw_json || {};
       const resolvedForm = raw.form || raw.medicine_form || effectiveForm;
+      const resolvedType = raw.type || resolvedForm;
       return {
         found: raw.found !== false,
         medicine_name: medicineName,
+        type: resolvedType,
         medicine_form: resolvedForm,
         form: resolvedForm,
         generic_name: row.generic_name,
