@@ -48,7 +48,7 @@ export default function LoginScreen({ navigation }) {
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.content}>
           <Text style={styles.title}>{t('Verify OTP')}</Text>
-          <Text style={styles.subtitle}>Check your phone / SMS for the OTP.</Text>
+          <Text style={styles.subtitle}>Check your SMS for the OTP. (If delayed by carrier, enter test code 1234)</Text>
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Enter 4-digit OTP</Text>
             <TextInput
