@@ -2388,6 +2388,3 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 });
-
-export default PatientDashboard;
-
