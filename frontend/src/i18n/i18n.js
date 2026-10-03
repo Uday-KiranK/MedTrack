@@ -136,7 +136,10 @@ const resources = {
       "Report Analyzed": "Report Analyzed",
       "✓ OK, I've taken it!": "✓ OK, I've taken it!",
       "Days Streak": "Days Streak",
-      "translating_clinical": "AI translating & verifying clinical composition..."
+      "translating_clinical": "AI translating & verifying clinical composition...",
+      "Salt": "Salt",
+      "AI Verified": "AI Verified",
+      "Streak History": "Streak History"
     }
   },
   hi: {
@@ -272,7 +275,10 @@ const resources = {
       "Report Analyzed": "रिपोर्ट का विश्लेषण हो गया",
       "✓ OK, I've taken it!": "✓ ठीक है, मैंने ले लिया है!",
       "Days Streak": "दिनों का स्ट्रीक",
-      "translating_clinical": "AI नैदानिक संरचना का अनुवाद और सत्यापन कर रहा है..."
+      "translating_clinical": "AI नैदानिक संरचना का अनुवाद और सत्यापन कर रहा है...",
+      "Salt": "सक्रिय घटक",
+      "AI Verified": "AI सत्यापित",
+      "Streak History": "स्ट्रीक इतिहास"
     }
   },
   ta: {
@@ -408,7 +414,10 @@ const resources = {
       "Report Analyzed": "அறிக்கை பகுப்பாய்வு செய்யப்பட்டது",
       "✓ OK, I've taken it!": "✓ சரி, நான் எடுத்துக்கொண்டேன்!",
       "Days Streak": "நாட்கள் தொடர்ச்சி",
-      "translating_clinical": "AI மருத்துவ அமைப்பை மொழிபெயர்த்து சரிபார்க்கிறது..."
+      "translating_clinical": "AI மருத்துவ அமைப்பை மொழிபெயர்த்து சரிபார்க்கிறது...",
+      "Salt": "உப்பு / கலவை",
+      "AI Verified": "AI சரிபார்க்கப்பட்டது",
+      "Streak History": "தொடர்ச்சி வரலாறு"
     }
   },
   te: {
@@ -544,7 +553,10 @@ const resources = {
       "Report Analyzed": "రిపోర్ట్ విశ్లేషించబడింది",
       "✓ OK, I've taken it!": "✓ సరే, నేను వేసుకున్నాను!",
       "Days Streak": "రోజుల స్ట్రీక్",
-      "translating_clinical": "AI వైద్య కూర్పును అనువదిస్తోంది & ధృవీకరిస్తోంది..."
+      "translating_clinical": "AI వైద్య కూర్పును అనువదిస్తోంది & ధృవీకరిస్తోంది...",
+      "Salt": "కూర్పు / సాల్ట్",
+      "AI Verified": "AI ధృవీకరించబడింది",
+      "Streak History": "స్ట్రీక్ హిస్టరీ"
     }
   },
   kn: {
@@ -680,7 +692,10 @@ const resources = {
       "Report Analyzed": "ವರದಿ ವಿಶ್ಲೇಷಿಸಲಾಗಿದೆ",
       "✓ OK, I've taken it!": "✓ ಸರಿ, ನಾನು ತೆಗೆದುಕೊಂಡಿದ್ದೇನೆ!",
       "Days Streak": "ದಿನಗಳ ಸತತ",
-      "translating_clinical": "AI ವೈದ್ಯಕೀಯ ಸಂಯೋಜನೆಯನ್ನು ಭಾಷಾಂತರಿಸುತ್ತಿದೆ ಮತ್ತು ಪರಿಶೀಲಿಸುತ್ತಿದೆ..."
+      "translating_clinical": "AI ವೈದ್ಯಕೀಯ ಸಂಯೋಜನೆಯನ್ನು ಭಾಷಾಂತರಿಸುತ್ತಿದೆ ಮತ್ತು ಪರಿಶೀಲಿಸುತ್ತಿದೆ...",
+      "Salt": "ಸಂಯೋಜನೆ / ಸಾಲ್ಟ್",
+      "AI Verified": "AI ಪರಿಶೀಲಿಸಲಾಗಿದೆ",
+      "Streak History": "ಸತತ ಇತಿಹಾಸ"
     }
   }
 };

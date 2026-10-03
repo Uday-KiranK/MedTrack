@@ -1027,7 +1027,7 @@ export default function PatientDashboard() {
             }
           }}
         >
-          <Text style={[styles.tabText, tab === 'medicine_info' && styles.activeTabText]}>💊 {t('Medicine Info')}</Text>
+          <Text style={[styles.tabText, tab === 'medicine_info' && styles.activeTabText]}>{t('Medicine Info')}</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -1129,24 +1129,12 @@ export default function PatientDashboard() {
                       </Text>
                     </View>
 
-                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                      <TouchableOpacity 
-                        style={[styles.showHistoryBtn, { flex: 1, marginTop: 0 }]}
-                        onPress={() => {
-                          setTab('medicine_info');
-                          handleSelectTabMedicine(item);
-                        }}
-                      >
-                        <Text style={styles.showHistoryBtnText}>ℹ️ {t('Medicine Info')}</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity 
-                        style={[styles.showHistoryBtn, { flex: 1, marginTop: 0, backgroundColor: '#E0F2FE', borderColor: COLORS.primary }]}
-                        onPress={() => setShowCalendarMed(item)}
-                      >
-                        <Text style={[styles.showHistoryBtnText, { color: COLORS.primary }]}>📅 Streak History</Text>
-                      </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity 
+                      style={[styles.showHistoryBtn, { marginTop: 12, backgroundColor: '#E0F2FE', borderColor: COLORS.primary }]}
+                      onPress={() => setShowCalendarMed(item)}
+                    >
+                      <Text style={[styles.showHistoryBtnText, { color: COLORS.primary }]}>📅 {t('Streak History')}</Text>
+                    </TouchableOpacity>
                   </View>
                 );
               }}
@@ -1215,14 +1203,14 @@ export default function PatientDashboard() {
                 <View style={styles.infoTabCard}>
                   <View style={styles.tabMedHeaderRow}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={styles.tabMedTitle}>💊 {activeTabMed.medicine_name}</Text>
+                      <Text style={styles.tabMedTitle}>{activeTabMed.medicine_name}</Text>
                       <Text style={styles.tabMedSub}>
-                        {info?.generic_name ? `Salt: ${info.generic_name}` : `${activeTabMed.dosage || ''} • ${activeTabMed.medicine_form || 'Tablet'}`}
+                        {info?.generic_name ? `${t('Salt')}: ${info.generic_name}` : `${activeTabMed.dosage || ''} • ${activeTabMed.medicine_form || 'Tablet'}`}
                       </Text>
                     </View>
                     {info?.isAiGenerated ? (
                       <View style={styles.aiBadge}>
-                        <Text style={styles.aiBadgeText}>🤖 AI Verified</Text>
+                        <Text style={styles.aiBadgeText}>🤖 {t('AI Verified')}</Text>
                       </View>
                     ) : null}
                   </View>
@@ -1364,9 +1352,9 @@ export default function PatientDashboard() {
                 <View style={{ flex: 1 }}>
                   <View style={styles.modalHeaderRow}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={styles.routineModalTitle}>💊 {selectedMedicineInfo.medicine_name}</Text>
+                      <Text style={styles.routineModalTitle}>{selectedMedicineInfo.medicine_name}</Text>
                       <Text style={styles.routineModalSub}>
-                        {info?.generic_name ? `Salt: ${info.generic_name}` : `${selectedMedicineInfo.dosage} • ${selectedMedicineInfo.medicine_form || 'Tablet'}`}
+                        {info?.generic_name ? `${t('Salt')}: ${info.generic_name}` : `${selectedMedicineInfo.dosage} • ${selectedMedicineInfo.medicine_form || 'Tablet'}`}
                       </Text>
                     </View>
                     <TouchableOpacity 
