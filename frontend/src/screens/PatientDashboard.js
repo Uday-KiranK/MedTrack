@@ -157,38 +157,36 @@ export default function PatientDashboard() {
   };
 
   const handleEnablePermissions = async () => {
-    if (!Notifications) return;
     try {
-      const { status: reqStatus } = await Notifications.requestPermissionsAsync();
-      if (reqStatus === 'granted') {
-        setHasNotificationPermission(true);
-        Alert.alert("✓ Success", "Alarm permissions granted! Medication alarms will now ring even when your app is closed or phone is locked.");
-        fetchMedicines();
-      } else {
-        setHasNotificationPermission(false);
-        handleOpenSettings();
+      if (Notifications && typeof Notifications.requestPermissionsAsync === 'function') {
+        const { status: reqStatus } = await Notifications.requestPermissionsAsync();
+        if (reqStatus === 'granted') {
+          setHasNotificationPermission(true);
+          Alert.alert("✓ Success", "Alarm permissions granted! Medication alarms will now ring even when your app is closed or phone is locked.");
+          fetchMedicines();
+          return;
+        }
       }
+      setHasNotificationPermission(false);
+      handleOpenSettings();
     } catch (e) {
       console.log('Error requesting permissions', e);
+      handleOpenSettings();
     }
   };
 
   const handleOpenSettings = () => {
-    Alert.alert(
-      'Android Settings Check ⚙️',
-      'For guaranteed exact alarms when screen is locked or app is closed:\n\n1. Ensure "Notifications" is ALLOWED.\n2. In Special App Access, ensure "Alarms & Reminders" is ON.\n3. Set Battery Usage to "Unrestricted".',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Open System Settings ⚙️', 
-          onPress: () => {
-            if (Linking.openSettings) {
-              Linking.openSettings();
-            }
-          } 
-        }
-      ]
-    );
+    try {
+      if (Linking.openSettings) {
+        Linking.openSettings().catch(() => {
+          Alert.alert('Android Settings ⚙️', 'Please go to phone Settings → Apps → MedTrack → Allow Notifications & Alarms.');
+        });
+      } else {
+        Alert.alert('Android Settings ⚙️', 'Please go to phone Settings → Apps → MedTrack → Allow Notifications & Alarms.');
+      }
+    } catch (err) {
+      Alert.alert('Android Settings ⚙️', 'Please go to phone Settings → Apps → MedTrack → Allow Notifications & Alarms.');
+    }
   };
 
   useEffect(() => {
@@ -1704,16 +1702,28 @@ const styles = StyleSheet.create({
   calendarStartCell: { borderColor: '#F59E0B', borderWidth: 2 },
   calendarStartCellText: { fontWeight: '800' },
   calendarStartStar: { position: 'absolute', bottom: -1, fontSize: 8, color: '#D97706' },
-  infoBox: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
+  routineModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    width: '92%',
+    maxWidth: 450,
+    maxHeight: '85%',
+    alignSelf: 'center',
+    ...SHADOWS.large,
   },
-  infoBoxTitle: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginBottom: 4 },
-  infoBoxText: { fontSize: 13, color: '#334155', lineHeight: 18 },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 10,
+  },
+  routineModalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.primary },
+  routineModalSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
+  closeModalCross: { fontSize: 22, color: '#64748B', fontWeight: 'bold', padding: 4 },
   speechBtn: {
     backgroundColor: '#EEF2FF',
     borderWidth: 1.5,
@@ -1736,4 +1746,14 @@ const styles = StyleSheet.create({
   speechBtnTextActive: {
     color: '#DC2626',
   },
+  infoBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  infoBoxTitle: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginBottom: 4 },
+  infoBoxText: { fontSize: 13, color: '#334155', lineHeight: 18 },
 });
