@@ -150,3 +150,19 @@ exports.recordIntake = async (req, res) => {
     res.status(500).json({ error: "Server error recording intake" });
   }
 };
+
+exports.fetchMedicineInfo = async (req, res) => {
+  try {
+    const { name, form, dosage } = req.query;
+    if (!name) {
+      return res.status(400).json({ message: "Medicine name query parameter is required" });
+    }
+    const { getMedicineInfo } = require("../services/medicineInfoService");
+    const info = await getMedicineInfo(name, form, dosage);
+    res.json(info);
+  } catch (error) {
+    console.error("Error fetching medicine info:", error);
+    res.status(500).json({ error: "Failed to fetch medicine info" });
+  }
+};
+

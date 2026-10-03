@@ -10,12 +10,14 @@ const {
   getDoctorPrescriptions,
   editMedicine,
   getMedicinesForDoctorPatient,
-  recordIntake
+  recordIntake,
+  fetchMedicineInfo
 } = require("../controllers/prescriptionController");
 
 router.post("/", authenticate, authorizeRole("doctor"), createPrescription);
 
 router.get("/my", authenticate, authorizeRole("patient"), getMyMedicines);
+router.get("/medicine-info", authenticate, fetchMedicineInfo);
 
 router.get("/doctor", authenticate, authorizeRole("doctor"), getDoctorPrescriptions);
 router.get("/doctor/patient/:patientId", authenticate, authorizeRole("doctor"), getMedicinesForDoctorPatient);

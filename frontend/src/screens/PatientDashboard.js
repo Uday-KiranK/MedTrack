@@ -44,6 +44,9 @@ export default function PatientDashboard() {
 
   // Feature 3: Patient Medicine Info Modal state
   const [selectedMedicineInfo, setSelectedMedicineInfo] = useState(null);
+  const [medicineDetails, setMedicineDetails] = useState(null);
+  const [loadingMedInfo, setLoadingMedInfo] = useState(false);
+  const [isSpeakingInfo, setIsSpeakingInfo] = useState(false);
 
   // Patient Routine state
   const [routine, setRoutine] = useState({
@@ -728,6 +731,55 @@ export default function PatientDashboard() {
     }
   };
 
+  const handleOpenMedicineInfo = async (med) => {
+    setSelectedMedicineInfo(med);
+    setMedicineDetails(null);
+    setLoadingMedInfo(true);
+    setIsSpeakingInfo(false);
+
+    try {
+      const res = await axios.get(`${API_URL}/prescriptions/medicine-info`, {
+        params: {
+          name: med.medicine_name,
+          form: med.medicine_form || 'Tablet',
+          dosage: med.dosage || ''
+        }
+      });
+      setMedicineDetails(res.data);
+    } catch (err) {
+      console.log("Fetch medicine info error:", err);
+      setMedicineDetails(getMedicineInfoDetails(med));
+    } finally {
+      setLoadingMedInfo(false);
+    }
+  };
+
+  const handleCloseMedicineInfo = () => {
+    if (isSpeakingInfo) {
+      try { Speech.stop(); } catch (e) {}
+    }
+    setIsSpeakingInfo(false);
+    setSelectedMedicineInfo(null);
+    setMedicineDetails(null);
+  };
+
+  const handleSpeechInfo = (info, med) => {
+    if (isSpeakingInfo) {
+      try { Speech.stop(); } catch (e) {}
+      setIsSpeakingInfo(false);
+      return;
+    }
+
+    const textToRead = `${med.medicine_name}. ${info?.generic_name ? 'Composition: ' + info.generic_name + '.' : ''} How and when to take: ${info?.howToTake || info?.how_to_take || ''}. Doctor Instruction: ${med.food_instruction || 'After Food'}. Primary uses: ${info?.uses || ''}.`;
+
+    setIsSpeakingInfo(true);
+    Speech.speak(textToRead, {
+      language: i18n.language || 'en',
+      onDone: () => setIsSpeakingInfo(false),
+      onError: () => setIsSpeakingInfo(false)
+    });
+  };
+
   const getMedicineInfoDetails = (med) => {
     const name = (med?.medicine_name || '').toLowerCase();
     const form = med?.medicine_form || 'Tablet';
@@ -931,7 +983,7 @@ export default function PatientDashboard() {
                     <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
                       <TouchableOpacity 
                         style={[styles.showHistoryBtn, { flex: 1, marginTop: 0 }]}
-                        onPress={() => setSelectedMedicineInfo(item)}
+                        onPress={() => handleOpenMedicineInfo(item)}
                       >
                         <Text style={styles.showHistoryBtnText}>ℹ️ Medicine Info</Text>
                       </TouchableOpacity>
@@ -986,55 +1038,96 @@ export default function PatientDashboard() {
         <View style={styles.modalOverlay}>
           <View style={styles.routineModalCard}>
             {selectedMedicineInfo && (() => {
-              const info = getMedicineInfoDetails(selectedMedicineInfo);
+              const info = medicineDetails || getMedicineInfoDetails(selectedMedicineInfo);
               return (
                 <View style={{ flex: 1 }}>
                   <View style={styles.modalHeaderRow}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
                       <Text style={styles.routineModalTitle}>💊 {selectedMedicineInfo.medicine_name}</Text>
-                      <Text style={styles.routineModalSub}>{selectedMedicineInfo.dosage} • {selectedMedicineInfo.medicine_form || 'Tablet'}</Text>
+                      <Text style={styles.routineModalSub}>
+                        {info?.generic_name ? `Salt: ${info.generic_name}` : `${selectedMedicineInfo.dosage} • ${selectedMedicineInfo.medicine_form || 'Tablet'}`}
+                      </Text>
                     </View>
-                    <TouchableOpacity onPress={() => setSelectedMedicineInfo(null)}>
+                    <TouchableOpacity onPress={handleCloseMedicineInfo}>
                       <Text style={styles.closeModalCross}>✕</Text>
                     </TouchableOpacity>
                   </View>
 
-                  <ScrollView showsVerticalScrollIndicator={true} contentContainerStyle={{ paddingBottom: 24 }}>
-                    <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>🎯 Primary Uses & Purpose</Text>
-                      <Text style={styles.infoBoxText}>{info.uses}</Text>
-                    </View>
-
-                    <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>🕒 How & When to Take</Text>
-                      <Text style={styles.infoBoxText}>{info.howToTake}</Text>
-                      <Text style={[styles.infoBoxText, { marginTop: 4, fontStyle: 'italic', color: COLORS.primary }]}>
-                        Doctor Instruction: {selectedMedicineInfo.food_instruction || 'After Food'} (~10 min meal gap)
+                  {loadingMedInfo ? (
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
+                      <ActivityIndicator size="large" color={COLORS.primary} />
+                      <Text style={{ marginTop: 14, color: COLORS.primary, fontWeight: '700', fontSize: 15, textAlign: 'center' }}>
+                        🤖 Analyzing Medical Info & Composition...
+                      </Text>
+                      <Text style={{ marginTop: 6, color: COLORS.textSecondary, fontSize: 12 }}>
+                        Fetching clinical details, food relationships & warnings
                       </Text>
                     </View>
+                  ) : (
+                    <ScrollView showsVerticalScrollIndicator={true} contentContainerStyle={{ paddingBottom: 24 }}>
+                      <TouchableOpacity 
+                        style={[styles.speechBtn, isSpeakingInfo && styles.speechBtnActive]}
+                        onPress={() => handleSpeechInfo(info, selectedMedicineInfo)}
+                      >
+                        <Text style={[styles.speechBtnText, isSpeakingInfo && styles.speechBtnTextActive]}>
+                          {isSpeakingInfo ? '🛑 Stop Reading' : '🔊 Listen Audio Instructions'}
+                        </Text>
+                      </TouchableOpacity>
 
-                    <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>⚠️ Common Side Effects</Text>
-                      <Text style={styles.infoBoxText}>{info.sideEffects}</Text>
-                    </View>
+                      <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxTitle}>🎯 Primary Uses & Purpose</Text>
+                        <Text style={styles.infoBoxText}>{info?.uses}</Text>
+                      </View>
 
-                    <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>🛡️ Precautions & Warnings</Text>
-                      <Text style={styles.infoBoxText}>{info.precautions}</Text>
-                    </View>
+                      <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxTitle}>🕒 How & When to Take</Text>
+                        <Text style={styles.infoBoxText}>{info?.howToTake || info?.how_to_take}</Text>
+                        <Text style={[styles.infoBoxText, { marginTop: 6, fontWeight: '700', color: COLORS.primary }]}>
+                          Doctor's Instruction: {selectedMedicineInfo.food_instruction || 'After Food'} (~10 min gap)
+                        </Text>
+                      </View>
 
-                    <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>📦 Storage Instructions</Text>
-                      <Text style={styles.infoBoxText}>{info.storage}</Text>
-                    </View>
+                      <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxTitle}>⚠️ Common Side Effects & Red Flags</Text>
+                        <Text style={styles.infoBoxText}>{info?.sideEffects || info?.side_effects}</Text>
+                      </View>
 
-                    <TouchableOpacity 
-                      style={[styles.saveRoutineBtn, { marginTop: 12 }]} 
-                      onPress={() => setSelectedMedicineInfo(null)}
-                    >
-                      <Text style={styles.saveRoutineBtnText}>✓ Got it, Thanks!</Text>
-                    </TouchableOpacity>
-                  </ScrollView>
+                      <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxTitle}>🛡️ Precautions & Warnings</Text>
+                        <Text style={styles.infoBoxText}>{info?.precautions}</Text>
+                      </View>
+
+                      {(info?.dietaryAdvice || info?.dietary_advice) ? (
+                        <View style={styles.infoBox}>
+                          <Text style={styles.infoBoxTitle}>🥗 Dietary & Lifestyle Advice</Text>
+                          <Text style={styles.infoBoxText}>{info?.dietaryAdvice || info?.dietary_advice}</Text>
+                        </View>
+                      ) : null}
+
+                      {(info?.missedDose || info?.missed_dose) ? (
+                        <View style={styles.infoBox}>
+                          <Text style={styles.infoBoxTitle}>⏰ Missed Dose Guidance</Text>
+                          <Text style={styles.infoBoxText}>{info?.missedDose || info?.missed_dose}</Text>
+                        </View>
+                      ) : null}
+
+                      <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxTitle}>📦 Storage Instructions</Text>
+                        <Text style={styles.infoBoxText}>{info?.storage}</Text>
+                      </View>
+
+                      <Text style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginVertical: 8, fontStyle: 'italic' }}>
+                        Note: Informational AI-assisted content. Not a substitute for professional medical advice.
+                      </Text>
+
+                      <TouchableOpacity 
+                        style={[styles.saveRoutineBtn, { marginTop: 8 }]} 
+                        onPress={handleCloseMedicineInfo}
+                      >
+                        <Text style={styles.saveRoutineBtnText}>✓ Got it, Thanks!</Text>
+                      </TouchableOpacity>
+                    </ScrollView>
+                  )}
                 </View>
               );
             })()}
@@ -1621,4 +1714,26 @@ const styles = StyleSheet.create({
   },
   infoBoxTitle: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginBottom: 4 },
   infoBoxText: { fontSize: 13, color: '#334155', lineHeight: 18 },
+  speechBtn: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  speechBtnActive: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FCA5A5',
+  },
+  speechBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  speechBtnTextActive: {
+    color: '#DC2626',
+  },
 });
