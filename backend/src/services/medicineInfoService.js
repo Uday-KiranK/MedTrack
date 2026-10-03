@@ -31,57 +31,93 @@ async function ensureTable() {
 
 ensureTable();
 
+function detectFormFromText(name = '', fallbackForm = 'Tablet') {
+  const n = (name || '').toLowerCase();
+  if (n.includes('syrup') || n.includes('suspension') || n.includes('liquid') || n.includes('elixir')) return 'Syrup';
+  if (n.includes('drop') || n.includes('drops')) return 'Drops';
+  if (n.includes('capsule') || n.includes('cap ')) return 'Capsule';
+  if (n.includes('injection') || n.includes('inj ') || n.includes('infusion')) return 'Injection';
+  if (n.includes('ointment') || n.includes('gel') || n.includes('cream') || n.includes('lotion')) return 'Ointment';
+  if (n.includes('inhaler') || n.includes('spray') || n.includes('respules')) return 'Inhaler';
+  if (n.includes('tablet') || n.includes('tab ')) return 'Tablet';
+  return fallbackForm || 'Tablet';
+}
+
 function getRuleBasedFallback(medicineName, medicineForm = 'Tablet', dosage = '') {
   const name = (medicineName || '').toLowerCase();
+  const effectiveForm = detectFormFromText(name, medicineForm);
 
   let generic_name = medicineName;
   let uses = "Used to treat and manage medical conditions as prescribed by your physician.";
-  let howToTake = `Take ${dosage || '1 unit'} as directed by your doctor. Swallow whole with a full glass of water.`;
+  
+  let howToTake = "";
+  if (effectiveForm === 'Syrup') {
+    howToTake = `Measure exact dose using a measuring cup or spoon (${dosage || '5ml - 10ml'}). Take after meals or as directed by your physician.`;
+  } else if (effectiveForm === 'Drops') {
+    howToTake = `Instill the prescribed number of drops (${dosage || '2-3 drops'}) into the affected area as directed.`;
+  } else if (effectiveForm === 'Injection') {
+    howToTake = `To be administered by a qualified healthcare professional as prescribed.`;
+  } else if (effectiveForm === 'Ointment') {
+    howToTake = `Apply a thin layer gently to the affected area as directed. Wash hands before and after application.`;
+  } else {
+    howToTake = `Take ${dosage || '1 ' + effectiveForm} as directed by your doctor. Swallow whole with a full glass of water.`;
+  }
+
   let sideEffects = "Mild nausea, headache, dizziness, or mild stomach upset may occur.";
   let precautions = "Do not double your dose if missed. Inform your doctor if you are pregnant, nursing, or taking other medications.";
   let dietaryAdvice = "Maintain adequate hydration. Avoid alcohol during medication course unless approved by your doctor.";
   let missedDose = "If you miss a dose, take it as soon as you remember. If it is almost time for your next dose, skip the missed dose and resume your normal schedule.";
-  let storage = "Store at room temperature (below 30°C) away from moisture, heat, and direct sunlight. Keep out of reach of children.";
+  let storage = effectiveForm === 'Syrup'
+    ? "Store bottle tightly closed at room temperature away from direct sunlight. Do not freeze. Keep out of reach of children."
+    : "Store at room temperature (below 30°C) away from moisture, heat, and direct sunlight. Keep out of reach of children.";
 
-  if (name.includes('paracetamol') || name.includes('crocin') || name.includes('dolo') || name.includes('acetaminophen')) {
-    generic_name = "Paracetamol / Acetaminophen (Analgesic & Antipyretic)";
-    uses = "Relieves mild to moderate pain (headache, body ache, toothache) and effectively reduces fever.";
-    howToTake = `Take ${dosage || '1 Tablet'} after meals with a full glass of water. Do not exceed 4000mg per day to protect liver health.`;
+  if (name.includes('paracetamol') || name.includes('crocin') || name.includes('dolo') || name.includes('acetaminophen') || name.includes('calpol')) {
+    generic_name = effectiveForm === 'Syrup'
+      ? "Paracetamol Paediatric / Oral Suspension (Analgesic & Antipyretic)"
+      : "Paracetamol / Acetaminophen (Analgesic & Antipyretic)";
+    uses = "Relieves mild to moderate pain (headache, body ache, fever) and effectively reduces elevated body temperature.";
+    howToTake = effectiveForm === 'Syrup'
+      ? `Measure exact dose with a calibrated measuring syringe or cup (${dosage || '5ml - 10ml'}). Take with or after food. Shake well before use.`
+      : `Take ${dosage || '1 Tablet'} after meals with a full glass of water. Do not exceed 4000mg per day to protect liver health.`;
     sideEffects = "Rare side effects include mild skin rash, nausea, or liver strain if taken in excessive amounts.";
     precautions = "Avoid alcohol during treatment. Do not take alongside other paracetamol-containing combination medicines.";
     dietaryAdvice = "Avoid heavy alcohol consumption. Stay well-hydrated with fresh water and oral fluids.";
   } else if (name.includes('cipcal') || name.includes('calcium') || name.includes('shelcal')) {
     generic_name = "Calcium Carbonate + Vitamin D3 (Cholecalciferol)";
     uses = "Treats and prevents calcium and Vitamin D deficiency, promotes bone density, helps treat osteoporosis and rickets.";
-    howToTake = `Take ${dosage || '1 Tablet'} daily preferably with or after meals. Swallow with a glass of water.`;
+    howToTake = effectiveForm === 'Syrup'
+      ? `Shake bottle well. Measure ${dosage || '5ml'} daily after meals with water.`
+      : `Take ${dosage || '1 Tablet'} daily preferably with or after meals. Swallow with a glass of water.`;
     sideEffects = "Mild constipation, stomach upset, or gas in rare cases.";
     precautions = "Consult doctor if you have kidney stones or elevated calcium levels (hypercalcemia).";
     dietaryAdvice = "Maintain a calcium-rich diet with dairy, leafy greens, and adequate hydration.";
   } else if (name.includes('amoxicillin') || name.includes('azithromycin') || name.includes('ciplox') || name.includes('augmentin') || name.includes('antibiotic')) {
     generic_name = "Broad-Spectrum Antibiotic";
     uses = "Treats bacterial infections of the respiratory tract, throat, ears, lungs, skin, or urinary tract.";
-    howToTake = `Take ${dosage || '1 unit'} at evenly spaced intervals daily. Complete the full prescribed course even if symptoms disappear early.`;
+    howToTake = effectiveForm === 'Syrup'
+      ? `Shake suspension well before each dose. Measure ${dosage || '5ml'} at evenly spaced intervals. Finish entire course.`
+      : `Take ${dosage || '1 unit'} at evenly spaced intervals daily. Complete the full prescribed course even if symptoms disappear early.`;
     sideEffects = "Mild diarrhea, soft stools, nausea, abdominal discomfort, or skin rash.";
     precautions = "Must finish full prescribed antibiotic course to prevent bacterial resistance. Seek immediate emergency care if severe hives occur.";
     dietaryAdvice = "Probiotic foods like yogurt or buttermilk can help restore healthy gut bacteria during antibiotic treatment.";
   } else if (name.includes('metformin') || name.includes('glycomet') || name.includes('diabetes')) {
     generic_name = "Metformin Hydrochloride (Antidiabetic Agent)";
     uses = "Controls high blood sugar levels in patients with Type 2 Diabetes Mellitus.";
-    howToTake = `Take ${dosage || '1 Tablet'} with or immediately after meals to minimize stomach upset and digestive discomfort.`;
+    howToTake = `Take ${dosage || '1 ' + effectiveForm} with or immediately after meals to minimize stomach upset and digestive discomfort.`;
     sideEffects = "Nausea, mild indigestion, stomach gas, metallic taste, or diarrhea during initial weeks.";
     precautions = "Stay well-hydrated. Avoid heavy alcohol intake. Report unusual muscle pain, severe weakness, or breathing trouble to your doctor.";
     dietaryAdvice = "Follow a low-glycemic, fiber-rich diet. Limit refined sugars and processed carbohydrates.";
   } else if (name.includes('pantoprazole') || name.includes('pan') || name.includes('omeprazole') || name.includes('rabeprazole') || name.includes('acidity')) {
     generic_name = "Proton Pump Inhibitor (Acid Suppressant)";
     uses = "Reduces stomach acid production, treating acidity, heartburn, GERD, acid reflux, and stomach ulcers.";
-    howToTake = `Take ${dosage || '1 Tablet'} 30 to 45 minutes before breakfast on an empty stomach with a glass of plain water.`;
+    howToTake = `Take ${dosage || '1 ' + effectiveForm} 30 to 45 minutes before breakfast on an empty stomach with a glass of plain water.`;
     sideEffects = "Headache, constipation, mild diarrhea, or flatulence.";
-    precautions = "Swallow tablet whole — do not crush, chew, or break gastro-resistant or delayed-release tablets.";
+    precautions = "Swallow whole — do not crush, chew, or break gastro-resistant or delayed-release medicines.";
     dietaryAdvice = "Avoid spicy, fried, or highly acidic foods, caffeinated beverages, and late-night heavy dinners.";
-  } else if (name.includes('cough') || name.includes('syrup') || medicineForm === 'Syrup') {
-    generic_name = "Cough Expectorant & Antitussive";
-    uses = "Soothes throat irritation, relieves cough, and thins airway mucus for easier breathing.";
-    howToTake = `Measure exact dose using the provided measuring cup or spoon (${dosage || '10ml'}). Take ~10 minutes after meals.`;
+  } else if (name.includes('cough') || name.includes('syrup') || effectiveForm === 'Syrup' || name.includes('benadryl') || name.includes('ascoril') || name.includes('grilinctus')) {
+    generic_name = "Cough Expectorant & Bronchodilator Syrup";
+    uses = "Soothes throat irritation, relieves dry or productive cough, and thins airway mucus for easier breathing.";
+    howToTake = `Shake well before use. Measure exact dose (${dosage || '5ml - 10ml'}) using the provided measuring cup. Take ~10 minutes after food.`;
     sideEffects = "Drowsiness, dry mouth, mild dizziness, or light stomach discomfort.";
     precautions = "Do not drive or operate machinery if feeling sleepy. Avoid drinking water immediately after syrup to allow throat soothing effect.";
     dietaryAdvice = "Sip warm water, herbal teas, or honey-lemon water to soothe bronchial passages.";
@@ -90,6 +126,8 @@ function getRuleBasedFallback(medicineName, medicineForm = 'Tablet', dosage = ''
   return {
     found: true,
     medicine_name: medicineName,
+    medicine_form: effectiveForm,
+    form: effectiveForm,
     generic_name,
     uses,
     howToTake,
@@ -147,6 +185,7 @@ async function translateWithSarvam(fieldsObj, targetLang) {
 }
 
 async function fetchMedicineInfoFromAI(medicineName, medicineForm, dosage, lang = 'en') {
+  const effectiveForm = detectFormFromText(medicineName, medicineForm);
   const isOnlineOpenRouter = currentProvider === "openrouter";
   const url = isOnlineOpenRouter
     ? "https://openrouter.ai/api/v1/chat/completions"
@@ -163,7 +202,7 @@ async function fetchMedicineInfoFromAI(medicineName, medicineForm, dosage, lang 
   }
 
   const systemPrompt = `You are an expert clinical pharmacologist and medical database.
-Search live web information to identify the exact active chemical composition, true salt ingredients, and clinical uses for the requested medicine.
+Search live web information to identify the exact active chemical composition, true pharmaceutical formulation (Syrup, Tablet, Capsule, Drops, Injection, Ointment, etc.), and clinical uses for the requested medicine.
 
 CRITICAL NON-EXISTENT MEDICINE & HALLUCINATION GUARD:
 If the requested query "${medicineName}" is NOT a recognized pharmaceutical drug, brand, chemical salt, prescription medication, OTC product, or medical dietary supplement (e.g. random letters, non-medical words, fictional names):
@@ -171,6 +210,7 @@ You MUST return ONLY this JSON:
 {
   "found": false,
   "medicine_name": "${medicineName}",
+  "form": "N/A",
   "generic_name": "Not Found",
   "uses": "No matching pharmaceutical drug or supplement was found for '${medicineName}'. Please check the spelling on your medicine packaging or consult your doctor.",
   "howToTake": "N/A",
@@ -185,9 +225,10 @@ If it is a real medicine, return valid JSON with "found": true and this structur
 {
   "found": true,
   "medicine_name": "${medicineName}",
+  "form": "${effectiveForm}",
   "generic_name": "Accurate active salt/ingredient composition (e.g. Calcium Carbonate 1250mg + Vitamin D3 250 IU)",
   "uses": "Clear, concise explanation of primary medical uses, conditions treated, and therapeutic benefits.",
-  "howToTake": "Detailed instructions on how to take/administer, meal relationships (with food/water), optimal frequency.",
+  "howToTake": "Detailed instructions on how to take/administer according to its form (for Syrup: measure liquid in ml using cup/spoon; for Tablet/Capsule: swallow whole with water; for Drops: instill drops as directed; for Ointment: apply thin layer), meal relationships, and optimal timing.",
   "sideEffects": "Common mild side effects and red-flag symptoms to watch out for.",
   "precautions": "Important medical warnings, contraindications, pregnancy/breastfeeding, alcohol.",
   "dietaryAdvice": "Foods, drinks, or lifestyle guidance that support or interfere with this medication.",
@@ -195,7 +236,7 @@ If it is a real medicine, return valid JSON with "found": true and this structur
   "storage": "Proper storage guidelines (temperature, moisture, child safety)."
 }`;
 
-  const userPrompt = `Provide accurate, live-verified pharmacology details for medicine: "${medicineName}" (Form: ${medicineForm || 'Tablet'}, Dosage: ${dosage || 'as prescribed'}). Return JSON only.`;
+  const userPrompt = `Provide accurate, live-verified pharmacology details for medicine: "${medicineName}" (Formulation: ${effectiveForm}, Dosage: ${dosage || 'as prescribed'}). Return JSON only.`;
 
   let response;
   try {
@@ -238,12 +279,16 @@ If it is a real medicine, return valid JSON with "found": true and this structur
   const parsed = JSON.parse(match[0]);
   parsed.isAiGenerated = true;
   parsed.lang = lang;
+  parsed.form = parsed.form || effectiveForm;
+  parsed.medicine_form = parsed.form;
 
   // Translate to target regional language via Sarvam AI
   if (lang && lang !== 'en') {
     const translated = await translateWithSarvam(parsed, lang);
     translated.isAiGenerated = true;
     translated.lang = lang;
+    translated.form = parsed.form;
+    translated.medicine_form = parsed.form;
     return translated;
   }
 
@@ -253,7 +298,11 @@ If it is a real medicine, return valid JSON with "found": true and this structur
 async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '', lang = 'en') {
   if (!medicineName) return null;
   const nameLower = medicineName.trim().toLowerCase();
-  const cacheKey = `${nameLower}_${lang || 'en'}`;
+  const effectiveForm = detectFormFromText(nameLower, medicineForm);
+  const formSuffix = (effectiveForm && effectiveForm !== 'Tablet' && !nameLower.includes(effectiveForm.toLowerCase()))
+    ? `_${effectiveForm.toLowerCase()}`
+    : '';
+  const cacheKey = `${nameLower}${formSuffix}_${lang || 'en'}`;
 
   // 1. Check PostgreSQL Cache
   try {
@@ -265,9 +314,12 @@ async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '
       console.log(`⚡ Cache hit for medicine info: "${cacheKey}"`);
       const row = cached.rows[0];
       const raw = row.raw_json || {};
+      const resolvedForm = raw.form || raw.medicine_form || effectiveForm;
       return {
         found: raw.found !== false,
         medicine_name: medicineName,
+        medicine_form: resolvedForm,
+        form: resolvedForm,
         generic_name: row.generic_name,
         uses: row.uses,
         howToTake: row.how_to_take,
@@ -285,12 +337,12 @@ async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '
   }
 
   // 2. Rule-based fallback as backup
-  const ruleResult = getRuleBasedFallback(medicineName, medicineForm, dosage);
+  const ruleResult = getRuleBasedFallback(medicineName, effectiveForm, dosage);
 
   // 3. AI Fetch via OpenRouter Live Web Search Grounding + Sarvam Translation
   try {
-    console.log(`🤖 Fetching Live Search AI Overview for: "${medicineName}" in ${lang}...`);
-    const aiResult = await fetchMedicineInfoFromAI(medicineName, medicineForm, dosage, lang);
+    console.log(`🤖 Fetching Live Search AI Overview for: "${medicineName}" (${effectiveForm}) in ${lang}...`);
+    const aiResult = await fetchMedicineInfoFromAI(medicineName, effectiveForm, dosage, lang);
 
     if (aiResult) {
       // Save to DB cache

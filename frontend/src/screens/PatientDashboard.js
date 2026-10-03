@@ -885,9 +885,23 @@ export default function PatientDashboard() {
     setMedicineDetails(null);
   };
 
+  const detectFormFromText = (name = '', fallbackForm = 'Tablet') => {
+    const n = (name || '').toLowerCase();
+    if (n.includes('syrup') || n.includes('suspension') || n.includes('liquid') || n.includes('elixir')) return 'Syrup';
+    if (n.includes('drop') || n.includes('drops')) return 'Drops';
+    if (n.includes('capsule') || n.includes('cap ')) return 'Capsule';
+    if (n.includes('injection') || n.includes('inj ') || n.includes('infusion')) return 'Injection';
+    if (n.includes('ointment') || n.includes('gel') || n.includes('cream') || n.includes('lotion')) return 'Ointment';
+    if (n.includes('inhaler') || n.includes('spray')) return 'Inhaler';
+    if (n.includes('tablet') || n.includes('tab ')) return 'Tablet';
+    return fallbackForm || 'Tablet';
+  };
+
   const handleSelectTabMedicine = (med, forceReload = false) => {
     if (!med) return;
-    setActiveTabMed(med);
+    const effectiveForm = med.medicine_form || detectFormFromText(med.medicine_name, 'Tablet');
+    const medWithForm = { ...med, medicine_form: effectiveForm };
+    setActiveTabMed(medWithForm);
     stopSpeech();
     if (!forceReload) {
       setTabMedInfo(null);
@@ -897,17 +911,24 @@ export default function PatientDashboard() {
     axios.get(`${API_URL}/prescriptions/medicine-info`, {
       params: {
         name: med.medicine_name,
-        form: med.medicine_form || 'Tablet',
+        form: effectiveForm,
         dosage: med.dosage || '',
         lang: i18n.language || 'en'
       },
       timeout: 18000
     }).then((res) => {
-      if (res.data) setTabMedInfo(res.data);
+      if (res.data) {
+        setTabMedInfo(res.data);
+        const resolvedForm = res.data.form || res.data.medicine_form || effectiveForm;
+        setActiveTabMed(prev => ({
+          ...prev,
+          medicine_form: resolvedForm
+        }));
+      }
     }).catch((err) => {
       console.log("Tab medicine info fetch note:", err.message);
       if (!tabMedInfo) {
-        setTabMedInfo(getMedicineInfoDetails(med));
+        setTabMedInfo(getMedicineInfoDetails(medWithForm));
       }
     }).finally(() => {
       setSearchingMed(false);
@@ -921,10 +942,11 @@ export default function PatientDashboard() {
     }
   }, [i18n.language]);
 
-  const handleSearchCustomMedicine = (query) => {
+  const handleSearchCustomMedicine = (query, chosenForm = null) => {
     if (!query || !query.trim()) return;
     const cleanQuery = query.trim();
-    const mockMed = { medicine_name: cleanQuery, dosage: '', medicine_form: 'Tablet' };
+    const detectedForm = chosenForm || detectFormFromText(cleanQuery, activeTabMed?.medicine_form || 'Tablet');
+    const mockMed = { medicine_name: cleanQuery, dosage: '', medicine_form: detectedForm };
     setActiveTabMed(mockMed);
     stopSpeech();
     setTabMedInfo(null);
@@ -933,13 +955,20 @@ export default function PatientDashboard() {
     axios.get(`${API_URL}/prescriptions/medicine-info`, {
       params: {
         name: cleanQuery,
-        form: 'Tablet',
+        form: detectedForm,
         dosage: '',
         lang: i18n.language || 'en'
       },
       timeout: 25000
     }).then((res) => {
-      if (res.data) setTabMedInfo(res.data);
+      if (res.data) {
+        setTabMedInfo(res.data);
+        const resolvedForm = res.data.form || res.data.medicine_form || detectedForm;
+        setActiveTabMed(prev => ({
+          ...prev,
+          medicine_form: resolvedForm
+        }));
+      }
     }).catch((err) => {
       console.log("Custom search medicine error:", err.message);
       setTabMedInfo(getMedicineInfoDetails(mockMed));
@@ -950,42 +979,60 @@ export default function PatientDashboard() {
 
   const getMedicineInfoDetails = (med) => {
     const name = (med?.medicine_name || '').toLowerCase();
-    const form = med?.medicine_form || 'Tablet';
+    const form = med?.medicine_form || detectFormFromText(name, 'Tablet');
 
     let uses = "Used to treat and manage medical conditions as prescribed by your physician.";
-    let howToTake = `Take ${med?.dosage || '1 unit'} as directed by your doctor. Swallow whole with a full glass of water.`;
+    let howToTake = "";
+    if (form === 'Syrup') {
+      howToTake = `Measure exact dose using a measuring cup or spoon (${med?.dosage || '5ml - 10ml'}). Take after meals or as directed by your physician.`;
+    } else if (form === 'Drops') {
+      howToTake = `Instill the prescribed number of drops (${med?.dosage || '2-3 drops'}) into the affected area as directed.`;
+    } else if (form === 'Injection') {
+      howToTake = `To be administered by a qualified healthcare professional as prescribed.`;
+    } else if (form === 'Ointment') {
+      howToTake = `Apply a thin layer gently to the affected area as directed. Wash hands before and after application.`;
+    } else {
+      howToTake = `Take ${med?.dosage || '1 ' + t(form)} as directed by your doctor. Swallow whole with a full glass of water.`;
+    }
+
     let sideEffects = "Mild nausea, headache, dizziness, or mild stomach upset may occur.";
     let precautions = "Do not double your dose if missed. Inform your doctor if you are pregnant, nursing, or taking other medications.";
-    let storage = "Store at room temperature (below 30°C) away from moisture, heat, and direct sunlight. Keep out of reach of children.";
+    let storage = form === 'Syrup'
+      ? "Store bottle tightly closed at room temperature away from direct sunlight. Do not freeze. Keep out of reach of children."
+      : "Store at room temperature (below 30°C) away from moisture, heat, and direct sunlight. Keep out of reach of children.";
 
-    if (name.includes('paracetamol') || name.includes('crocin') || name.includes('dolo') || name.includes('acetaminophen')) {
+    if (name.includes('paracetamol') || name.includes('crocin') || name.includes('dolo') || name.includes('acetaminophen') || name.includes('calpol')) {
       uses = "Relieves mild to moderate pain (headache, body ache, toothache) and reduces fever.";
-      howToTake = `Take ${med?.dosage || '1 Tablet'} after meals with water. Do not exceed 4000mg per day to protect liver health.`;
+      howToTake = form === 'Syrup'
+        ? `Measure exact dose with a measuring cup or syringe (${med?.dosage || '5ml - 10ml'}). Take after food with water. Shake well before use.`
+        : `Take ${med?.dosage || '1 ' + t(form)} after meals with water. Do not exceed 4000mg per day to protect liver health.`;
       sideEffects = "Rare side effects include allergic rash, nausea, or liver toxicity if taken in overdose.";
       precautions = "Avoid alcohol during treatment. Do not take alongside other paracetamol-containing medications.";
     } else if (name.includes('amoxicillin') || name.includes('azithromycin') || name.includes('ciplox') || name.includes('antibiotic')) {
       uses = "Treats bacterial infections of the respiratory tract, throat, ears, skin, or urinary tract.";
-      howToTake = `Take ${med?.dosage || '1 unit'} at fixed intervals daily. Complete the full prescribed course even if symptoms disappear early.`;
+      howToTake = form === 'Syrup'
+        ? `Shake well before use. Measure ${med?.dosage || '5ml'} at fixed intervals daily. Finish entire course.`
+        : `Take ${med?.dosage || '1 unit'} at fixed intervals daily. Complete the full prescribed course even if symptoms disappear early.`;
       sideEffects = "Mild diarrhea, soft stools, nausea, abdominal discomfort, or skin rash.";
       precautions = "Finish full antibiotic course. Seek emergency care immediately if severe rash or facial swelling occurs.";
     } else if (name.includes('metformin') || name.includes('glycomet') || name.includes('diabetes')) {
       uses = "Helps control high blood sugar levels in patients with Type 2 Diabetes.";
-      howToTake = `Take ${med?.dosage || '1 Tablet'} with or immediately after meals to minimize stomach upset.`;
+      howToTake = `Take ${med?.dosage || '1 ' + t(form)} with or immediately after meals to minimize stomach upset.`;
       sideEffects = "Nausea, mild indigestion, gas, metallic taste, or diarrhea during initial weeks.";
       precautions = "Stay hydrated. Avoid heavy alcohol intake. Report unusual muscle pain or severe weakness to your doctor.";
     } else if (name.includes('pantoprazole') || name.includes('pan') || name.includes('omeprazole') || name.includes('rabeprazole') || name.includes('acidity')) {
       uses = "Reduces stomach acid production, treating acidity, heartburn, GERD, and stomach ulcers.";
-      howToTake = `Take ${med?.dosage || '1 Tablet'} 30 minutes before breakfast on an empty stomach with water.`;
+      howToTake = `Take ${med?.dosage || '1 ' + t(form)} 30 minutes before breakfast on an empty stomach with water.`;
       sideEffects = "Headache, constipation, mild diarrhea, abdominal discomfort.";
       precautions = "Swallow whole — do not crush or chew prolonged release tablets.";
-    } else if (name.includes('cough') || name.includes('syrup') || form === 'Syrup') {
+    } else if (name.includes('cough') || name.includes('syrup') || form === 'Syrup' || name.includes('benadryl') || name.includes('ascoril') || name.includes('grilinctus')) {
       uses = "Soothes cough, clear nasal congestion, and thins airway mucus for easier breathing.";
-      howToTake = `Measure exact dose using measuring cup/spoon (${med?.dosage || '10ml'}). Take ~10 minutes after food.`;
+      howToTake = `Measure exact dose using measuring cup/spoon (${med?.dosage || '5ml - 10ml'}). Take ~10 minutes after food.`;
       sideEffects = "Drowsiness, dry mouth, mild dizziness, or light stomach discomfort.";
       precautions = "Do not drive or operate machinery if feeling sleepy. Avoid drinking water immediately after syrup to allow throat soothing.";
     }
 
-    return { uses, howToTake, sideEffects, precautions, storage };
+    return { uses, howToTake, sideEffects, precautions, storage, medicine_form: form, form };
   };
 
   const renderFormattedText = (text) => {
@@ -1192,6 +1239,40 @@ export default function PatientDashboard() {
               </TouchableOpacity>
             </View>
 
+            {/* Formulation Quick Filter Chips */}
+            <View style={{ marginBottom: 14 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+                {[
+                  { key: 'Tablet', icon: '💊' },
+                  { key: 'Syrup', icon: '🥄' },
+                  { key: 'Capsule', icon: '💊' },
+                  { key: 'Drops', icon: '💧' },
+                  { key: 'Injection', icon: '💉' },
+                  { key: 'Ointment', icon: '🧴' },
+                ].map((item) => {
+                  const isFormActive = (activeTabMed?.medicine_form || '').toLowerCase() === item.key.toLowerCase();
+                  return (
+                    <TouchableOpacity
+                      key={item.key}
+                      style={[styles.formSelectChip, isFormActive && styles.formSelectChipActive]}
+                      onPress={() => {
+                        const targetName = activeTabMed?.medicine_name || searchMedQuery;
+                        if (targetName && targetName.trim()) {
+                          handleSearchCustomMedicine(targetName, item.key);
+                        } else {
+                          setActiveTabMed({ medicine_name: '', dosage: '', medicine_form: item.key });
+                        }
+                      }}
+                    >
+                      <Text style={[styles.formSelectChipText, isFormActive && styles.formSelectChipTextActive]}>
+                        {item.icon} {t(item.key)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
             {/* Prescribed for You Chips (Deduplicated) */}
             {(() => {
               const uniquePrescribedMeds = Array.from(
@@ -1229,9 +1310,23 @@ export default function PatientDashboard() {
                   <View style={styles.tabMedHeaderRow}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
                       <Text style={styles.tabMedTitle}>{activeTabMed.medicine_name}</Text>
-                      <Text style={styles.tabMedSub}>
-                        {info?.generic_name ? `${t('Salt')}: ${info.generic_name}` : `${activeTabMed.dosage || ''} • ${activeTabMed.medicine_form || 'Tablet'}`}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                        <View style={styles.formBadge}>
+                          <Text style={styles.formBadgeText}>
+                            {activeTabMed.medicine_form === 'Syrup' ? '🥄 ' : activeTabMed.medicine_form === 'Drops' ? '💧 ' : activeTabMed.medicine_form === 'Capsule' ? '💊 ' : activeTabMed.medicine_form === 'Injection' ? '💉 ' : activeTabMed.medicine_form === 'Ointment' ? '🧴 ' : '💊 '}
+                            {t(activeTabMed.medicine_form || 'Tablet')}
+                          </Text>
+                        </View>
+                        {info?.generic_name ? (
+                          <Text style={styles.tabMedSub}>
+                            {t('Salt')}: {info.generic_name}
+                          </Text>
+                        ) : activeTabMed.dosage ? (
+                          <Text style={styles.tabMedSub}>
+                            {activeTabMed.dosage}
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
                     {info?.isAiGenerated ? (
                       <View style={styles.aiBadge}>
@@ -1390,9 +1485,23 @@ export default function PatientDashboard() {
                   <View style={styles.modalHeaderRow}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
                       <Text style={styles.routineModalTitle}>{selectedMedicineInfo.medicine_name}</Text>
-                      <Text style={styles.routineModalSub}>
-                        {info?.generic_name ? `${t('Salt')}: ${info.generic_name}` : `${selectedMedicineInfo.dosage} • ${selectedMedicineInfo.medicine_form || 'Tablet'}`}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                        <View style={styles.formBadge}>
+                          <Text style={styles.formBadgeText}>
+                            {selectedMedicineInfo.medicine_form === 'Syrup' ? '🥄 ' : selectedMedicineInfo.medicine_form === 'Drops' ? '💧 ' : selectedMedicineInfo.medicine_form === 'Capsule' ? '💊 ' : selectedMedicineInfo.medicine_form === 'Injection' ? '💉 ' : selectedMedicineInfo.medicine_form === 'Ointment' ? '🧴 ' : '💊 '}
+                            {t(selectedMedicineInfo.medicine_form || 'Tablet')}
+                          </Text>
+                        </View>
+                        {info?.generic_name ? (
+                          <Text style={styles.routineModalSub}>
+                            {t('Salt')}: {info.generic_name}
+                          </Text>
+                        ) : selectedMedicineInfo.dosage ? (
+                          <Text style={styles.routineModalSub}>
+                            {selectedMedicineInfo.dosage}
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
                     <TouchableOpacity 
                       onPress={handleCloseMedicineInfo}
@@ -2242,5 +2351,40 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  formSelectChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  formSelectChipActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: COLORS.primary,
+  },
+  formSelectChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  formSelectChipTextActive: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  formBadge: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    alignSelf: 'flex-start',
+  },
+  formBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
 });
