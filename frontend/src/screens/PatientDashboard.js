@@ -765,8 +765,22 @@ export default function PatientDashboard() {
     // Build ordered sections
     const sections = [];
 
+    // If medicine was not found
+    if (info?.found === false) {
+      isSpeakingRef.current = true;
+      setIsSpeakingInfo(true);
+      Speech.speak(`${med?.medicine_name || ''}. ${info?.uses || t('not_found_med_msg')}`, {
+        language: ttsLang,
+        pitch: 1.0,
+        rate: 0.92,
+        onDone: () => { isSpeakingRef.current = false; setIsSpeakingInfo(false); },
+        onError: () => { isSpeakingRef.current = false; setIsSpeakingInfo(false); }
+      });
+      return;
+    }
+
     // 1. Medicine Name & Salt
-    sections.push(`${med?.medicine_name || ''}. ${info?.generic_name ? info.generic_name : ''}`);
+    sections.push(`${med?.medicine_name || ''}. ${info?.generic_name && info.generic_name !== 'Not Found' ? info.generic_name : ''}`);
 
     // 2. Uses
     if (info?.uses) {
@@ -871,12 +885,13 @@ export default function PatientDashboard() {
     setMedicineDetails(null);
   };
 
-  const handleSelectTabMedicine = (med) => {
+  const handleSelectTabMedicine = (med, forceReload = false) => {
     if (!med) return;
     setActiveTabMed(med);
     stopSpeech();
-    const fallback = getMedicineInfoDetails(med);
-    setTabMedInfo(fallback);
+    if (!forceReload) {
+      setTabMedInfo(null);
+    }
     setSearchingMed(true);
 
     axios.get(`${API_URL}/prescriptions/medicine-info`, {
@@ -886,24 +901,33 @@ export default function PatientDashboard() {
         dosage: med.dosage || '',
         lang: i18n.language || 'en'
       },
-      timeout: 15000
+      timeout: 18000
     }).then((res) => {
       if (res.data) setTabMedInfo(res.data);
     }).catch((err) => {
       console.log("Tab medicine info fetch note:", err.message);
+      if (!tabMedInfo) {
+        setTabMedInfo(getMedicineInfoDetails(med));
+      }
     }).finally(() => {
       setSearchingMed(false);
     });
   };
 
+  // Automatically refresh medicine info whenever patient changes the language
+  useEffect(() => {
+    if (activeTabMed) {
+      handleSelectTabMedicine(activeTabMed, true);
+    }
+  }, [i18n.language]);
+
   const handleSearchCustomMedicine = (query) => {
     if (!query || !query.trim()) return;
     const cleanQuery = query.trim();
-    const mockMed = { medicine_name: cleanQuery, dosage: 'Standard Dose', medicine_form: 'Medicine' };
+    const mockMed = { medicine_name: cleanQuery, dosage: '', medicine_form: 'Tablet' };
     setActiveTabMed(mockMed);
     stopSpeech();
-    const fallback = getMedicineInfoDetails(mockMed);
-    setTabMedInfo(fallback);
+    setTabMedInfo(null);
     setSearchingMed(true);
 
     axios.get(`${API_URL}/prescriptions/medicine-info`, {
@@ -913,11 +937,12 @@ export default function PatientDashboard() {
         dosage: '',
         lang: i18n.language || 'en'
       },
-      timeout: 18000
+      timeout: 25000
     }).then((res) => {
       if (res.data) setTabMedInfo(res.data);
     }).catch((err) => {
       console.log("Custom search medicine error:", err.message);
+      setTabMedInfo(getMedicineInfoDetails(mockMed));
     }).finally(() => {
       setSearchingMed(false);
     });
@@ -999,7 +1024,7 @@ export default function PatientDashboard() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <TouchableOpacity style={styles.settingsBtn} onPress={() => setSettingsModalVisible(true)}>
-              <Text style={styles.settingsBtnText}>⚙️ Routine</Text>
+              <Text style={styles.settingsBtnText}>⚙️ {t('Routine')}</Text>
             </TouchableOpacity>
             <LanguageButton onPress={() => setLangModalVisible(true)} />
             <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
@@ -1055,11 +1080,11 @@ export default function PatientDashboard() {
                         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, flex: 1 }}>
                           <Text style={{ fontSize: 26 }}>🚨</Text>
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.permissionWarningTitle}>Background Medication Alarms</Text>
+                            <Text style={styles.permissionWarningTitle}>{t('Background Medication Alarms')}</Text>
                             <Text style={styles.permissionWarningSub}>
                               {isExpoGo 
-                                ? 'Running in Expo Go (Dev Mode). For background alarms when screen is locked or app is closed, use the compiled APK.'
-                                : 'Notification & Alarm permissions are turned OFF. Enable permissions to receive timely alarms.'}
+                                ? t('expo_go_permission_msg')
+                                : t('alarm_permission_off_msg')}
                             </Text>
                           </View>
                         </View>
@@ -1072,7 +1097,7 @@ export default function PatientDashboard() {
                         </TouchableOpacity>
                       </View>
                       <TouchableOpacity style={styles.enablePermissionBtn} onPress={handleEnablePermissions}>
-                        <Text style={styles.enablePermissionBtnText}>⚡ Enable Alarm Permissions & Settings</Text>
+                        <Text style={styles.enablePermissionBtnText}>⚡ {t('Enable Alarm Permissions & Settings')}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1092,15 +1117,15 @@ export default function PatientDashboard() {
                           <Text style={styles.medName}>{item.medicine_name}</Text>
                           {isClinicPharmacy ? (
                             <View style={styles.clinicBadge}>
-                              <Text style={styles.clinicBadgeText}>✓ Clinic Inventory Stock</Text>
+                              <Text style={styles.clinicBadgeText}>✓ {t('Clinic Inventory Stock')}</Text>
                             </View>
                           ) : (
                             <View style={styles.outsideBadge}>
-                              <Text style={styles.outsideBadgeText}>🛒 Buy Outside</Text>
+                              <Text style={styles.outsideBadgeText}>🛒 {t('Buy Outside')}</Text>
                             </View>
                           )}
                         </View>
-                        <Text style={styles.medDetail}>{item.dosage} • {item.medicine_form || 'Tablet'}</Text>
+                        <Text style={styles.medDetail}>{item.dosage} • {item.medicine_form ? t(item.medicine_form) : t('Tablet')}</Text>
                       </View>
 
                       {completed ? (
@@ -1116,16 +1141,16 @@ export default function PatientDashboard() {
 
                     <View style={styles.dateRangeBox}>
                       <Text style={styles.dateRangeText}>
-                        🗓️ <Text style={{ fontWeight: '700' }}>Schedule:</Text> {item.schedule_type ? t(item.schedule_type.toLowerCase()) : 'daily'} ({item.duration_days || 7} days)
+                        🗓️ <Text style={{ fontWeight: '700' }}>{t('Schedule')}:</Text> {item.schedule_type ? t(item.schedule_type.toLowerCase()) : t('Daily')} ({item.duration_days || 7} {t('days')})
                       </Text>
                       <Text style={styles.dateRangeText}>
-                        ⏰ <Text style={{ fontWeight: '700' }}>Alarm Times:</Text> {alarmTimes.join(', ')}
+                        ⏰ <Text style={{ fontWeight: '700' }}>{t('Alarm Times')}:</Text> {alarmTimes.join(', ')}
                       </Text>
                       <Text style={styles.dateRangeText}>
-                        🍽️ <Text style={{ fontWeight: '700' }}>Instruction:</Text> {item.food_instruction ? t(item.food_instruction) : 'After Food'} (~10m offset)
+                        🍽️ <Text style={{ fontWeight: '700' }}>{t('Instruction')}:</Text> {item.food_instruction ? t(item.food_instruction) : t('After Food')} ({t('~10m offset')})
                       </Text>
                       <Text style={styles.dateRangeText}>
-                        🚀 <Text style={{ fontWeight: '700' }}>Starts:</Text> {formatDisplayDate(item.start_date || new Date())} {isTodayDue ? ' (Fires Today 🔔)' : ' (Starts Later)'}
+                        🚀 <Text style={{ fontWeight: '700' }}>{t('Starts')}:</Text> {formatDisplayDate(item.start_date || new Date())} {isTodayDue ? ` (${t('Fires Today')} 🔔)` : ` (${t('Starts Later')})`}
                       </Text>
                     </View>
 
@@ -1218,74 +1243,86 @@ export default function PatientDashboard() {
                   {searchingMed && !tabMedInfo?.isAiGenerated ? (
                     <View style={styles.aiLoadingBanner}>
                       <ActivityIndicator size="small" color={COLORS.primary} />
-                      <Text style={styles.aiLoadingText}>🤖 Translating & verifying clinical composition in {i18n.language.toUpperCase()}...</Text>
+                      <Text style={styles.aiLoadingText}>🤖 {t('translating_clinical')}</Text>
                     </View>
                   ) : null}
 
-                  {/* Sequential Speech Audio Readout in Regional Language */}
-                  <TouchableOpacity 
-                    style={[styles.speechBtn, isSpeakingInfo && styles.speechBtnActive]}
-                    onPress={() => handleSpeechInfo(info, activeTabMed)}
-                  >
-                    <Text style={[styles.speechBtnText, isSpeakingInfo && styles.speechBtnTextActive]}>
-                      {isSpeakingInfo ? `🛑 ${t('Stop Reading')}` : `🔊 ${t('Listen Audio Instructions')}`}
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* 1. Primary Uses */}
-                  <View style={styles.infoBox}>
-                    <Text style={styles.infoBoxTitle}>🎯 {t('Primary Uses & Purpose')}</Text>
-                    <Text style={styles.infoBoxText}>{info?.uses}</Text>
-                  </View>
-
-                  {/* 2. How & When to Take */}
-                  <View style={styles.infoBox}>
-                    <Text style={styles.infoBoxTitle}>🕒 {t('How & When to Take')}</Text>
-                    <Text style={styles.infoBoxText}>{info?.howToTake || info?.how_to_take}</Text>
-                    {activeTabMed.food_instruction ? (
-                      <Text style={[styles.infoBoxText, { marginTop: 6, fontWeight: '700', color: COLORS.primary }]}>
-                        {t("Doctor's Instruction")}: {t(activeTabMed.food_instruction)} (~10 min gap)
+                  {info?.found === false ? (
+                    <View style={styles.emptyGuideCard}>
+                      <Text style={{ fontSize: 44, marginBottom: 12 }}>⚠️</Text>
+                      <Text style={[styles.emptyGuideTitle, { color: '#B91C1C' }]}>{t('Medicine Not Found')}</Text>
+                      <Text style={styles.emptyGuideText}>
+                        {info?.uses || t('not_found_med_msg')}
                       </Text>
-                    ) : null}
-                  </View>
-
-                  {/* 3. Side Effects */}
-                  <View style={styles.infoBox}>
-                    <Text style={styles.infoBoxTitle}>⚠️ {t('Common Side Effects & Red Flags')}</Text>
-                    <Text style={styles.infoBoxText}>{info?.sideEffects || info?.side_effects}</Text>
-                  </View>
-
-                  {/* 4. Precautions */}
-                  <View style={styles.infoBox}>
-                    <Text style={styles.infoBoxTitle}>🛡️ {t('Precautions & Warnings')}</Text>
-                    <Text style={styles.infoBoxText}>{info?.precautions}</Text>
-                  </View>
-
-                  {/* 5. Dietary Advice */}
-                  {(info?.dietaryAdvice || info?.dietary_advice) ? (
-                    <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>🥗 {t('Dietary & Lifestyle Advice')}</Text>
-                      <Text style={styles.infoBoxText}>{info?.dietaryAdvice || info?.dietary_advice}</Text>
                     </View>
-                  ) : null}
+                  ) : (
+                    <>
+                      {/* Sequential Speech Audio Readout in Regional Language */}
+                      <TouchableOpacity 
+                        style={[styles.speechBtn, isSpeakingInfo && styles.speechBtnActive]}
+                        onPress={() => handleSpeechInfo(info, activeTabMed)}
+                      >
+                        <Text style={[styles.speechBtnText, isSpeakingInfo && styles.speechBtnTextActive]}>
+                          {isSpeakingInfo ? `🛑 ${t('Stop Reading')}` : `🔊 ${t('Listen Audio Instructions')}`}
+                        </Text>
+                      </TouchableOpacity>
 
-                  {/* 6. Missed Dose */}
-                  {(info?.missedDose || info?.missed_dose) ? (
-                    <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>⏰ {t('Missed Dose Guidance')}</Text>
-                      <Text style={styles.infoBoxText}>{info?.missedDose || info?.missed_dose}</Text>
-                    </View>
-                  ) : null}
+                      {/* 1. Primary Uses */}
+                      <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxTitle}>🎯 {t('Primary Uses & Purpose')}</Text>
+                        <Text style={styles.infoBoxText}>{info?.uses}</Text>
+                      </View>
 
-                  {/* 7. Storage */}
-                  <View style={styles.infoBox}>
-                    <Text style={styles.infoBoxTitle}>📦 {t('Storage Instructions')}</Text>
-                    <Text style={styles.infoBoxText}>{info?.storage}</Text>
-                  </View>
+                      {/* 2. How & When to Take */}
+                      <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxTitle}>🕒 {t('How & When to Take')}</Text>
+                        <Text style={styles.infoBoxText}>{info?.howToTake || info?.how_to_take}</Text>
+                        {activeTabMed.food_instruction ? (
+                          <Text style={[styles.infoBoxText, { marginTop: 6, fontWeight: '700', color: COLORS.primary }]}>
+                            {t("Doctor's Instruction")}: {t(activeTabMed.food_instruction)} ({t('~10 min gap')})
+                          </Text>
+                        ) : null}
+                      </View>
 
-                  <Text style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 12, fontStyle: 'italic' }}>
-                    {t('disclaimer_text')}
-                  </Text>
+                      {/* 3. Side Effects */}
+                      <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxTitle}>⚠️ {t('Common Side Effects & Red Flags')}</Text>
+                        <Text style={styles.infoBoxText}>{info?.sideEffects || info?.side_effects}</Text>
+                      </View>
+
+                      {/* 4. Precautions */}
+                      <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxTitle}>🛡️ {t('Precautions & Warnings')}</Text>
+                        <Text style={styles.infoBoxText}>{info?.precautions}</Text>
+                      </View>
+
+                      {/* 5. Dietary Advice */}
+                      {(info?.dietaryAdvice || info?.dietary_advice) ? (
+                        <View style={styles.infoBox}>
+                          <Text style={styles.infoBoxTitle}>🥗 {t('Dietary & Lifestyle Advice')}</Text>
+                          <Text style={styles.infoBoxText}>{info?.dietaryAdvice || info?.dietary_advice}</Text>
+                        </View>
+                      ) : null}
+
+                      {/* 6. Missed Dose */}
+                      {(info?.missedDose || info?.missed_dose) ? (
+                        <View style={styles.infoBox}>
+                          <Text style={styles.infoBoxTitle}>⏰ {t('Missed Dose Guidance')}</Text>
+                          <Text style={styles.infoBoxText}>{info?.missedDose || info?.missed_dose}</Text>
+                        </View>
+                      ) : null}
+
+                      {/* 7. Storage */}
+                      <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxTitle}>📦 {t('Storage Instructions')}</Text>
+                        <Text style={styles.infoBoxText}>{info?.storage}</Text>
+                      </View>
+
+                      <Text style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 12, fontStyle: 'italic' }}>
+                        {t('disclaimer_text')}
+                      </Text>
+                    </>
+                  )}
                 </View>
               );
             })() : (

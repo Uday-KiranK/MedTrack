@@ -4,6 +4,7 @@ const axios = require("axios");
 let currentProvider = "openrouter";
 const OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:online";
 const GROQ_MODEL = "openai/gpt-oss-120b";
+const SUPPORTED_LANGS = ["en", "hi", "te", "ta", "kn"];
 
 async function ensureTable() {
   try {
@@ -87,6 +88,7 @@ function getRuleBasedFallback(medicineName, medicineForm = 'Tablet', dosage = ''
   }
 
   return {
+    found: true,
     medicine_name: medicineName,
     generic_name,
     uses,
@@ -162,8 +164,26 @@ async function fetchMedicineInfoFromAI(medicineName, medicineForm, dosage, lang 
 
   const systemPrompt = `You are an expert clinical pharmacologist and medical database.
 Search live web information to identify the exact active chemical composition, true salt ingredients, and clinical uses for the requested medicine.
-Return ONLY valid JSON with this exact structure (no markdown formatting, no code block backticks):
+
+CRITICAL NON-EXISTENT MEDICINE & HALLUCINATION GUARD:
+If the requested query "${medicineName}" is NOT a recognized pharmaceutical drug, brand, chemical salt, prescription medication, OTC product, or medical dietary supplement (e.g. random letters, non-medical words, fictional names):
+You MUST return ONLY this JSON:
 {
+  "found": false,
+  "medicine_name": "${medicineName}",
+  "generic_name": "Not Found",
+  "uses": "No matching pharmaceutical drug or supplement was found for '${medicineName}'. Please check the spelling on your medicine packaging or consult your doctor.",
+  "howToTake": "N/A",
+  "sideEffects": "N/A",
+  "precautions": "Always verify medicine names with a doctor or licensed pharmacist.",
+  "dietaryAdvice": "N/A",
+  "missedDose": "N/A",
+  "storage": "N/A"
+}
+
+If it is a real medicine, return valid JSON with "found": true and this structure (no markdown formatting, no code block backticks):
+{
+  "found": true,
   "medicine_name": "${medicineName}",
   "generic_name": "Accurate active salt/ingredient composition (e.g. Calcium Carbonate 1250mg + Vitamin D3 250 IU)",
   "uses": "Clear, concise explanation of primary medical uses, conditions treated, and therapeutic benefits.",
@@ -244,7 +264,9 @@ async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '
     if (cached.rows.length > 0) {
       console.log(`⚡ Cache hit for medicine info: "${cacheKey}"`);
       const row = cached.rows[0];
+      const raw = row.raw_json || {};
       return {
+        found: raw.found !== false,
         medicine_name: medicineName,
         generic_name: row.generic_name,
         uses: row.uses,
@@ -313,4 +335,27 @@ async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '
   return ruleResult;
 }
 
-module.exports = { getMedicineInfo };
+// Background pre-cache function for all supported languages
+async function precacheMedicineInfoAllLangs(medicineName, medicineForm = 'Tablet', dosage = '') {
+  if (!medicineName) return;
+  console.log(`🚀 Pre-caching medicine info across all languages for: "${medicineName}"`);
+  
+  // First fetch 'en' (which gets live web search AI overview)
+  try {
+    await getMedicineInfo(medicineName, medicineForm, dosage, 'en');
+  } catch (e) {
+    console.warn(`Pre-cache 'en' error for ${medicineName}:`, e.message);
+  }
+
+  // Then fetch regional languages in sequence
+  for (const lang of ['te', 'hi', 'ta', 'kn']) {
+    try {
+      await getMedicineInfo(medicineName, medicineForm, dosage, lang);
+    } catch (e) {
+      console.warn(`Pre-cache '${lang}' error for ${medicineName}:`, e.message);
+    }
+  }
+  console.log(`✓ All languages pre-cached for: "${medicineName}"`);
+}
+
+module.exports = { getMedicineInfo, precacheMedicineInfoAllLangs };

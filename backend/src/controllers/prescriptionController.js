@@ -8,6 +8,7 @@ const {
   getDoctorPatientPrescriptions,
   recordIntake
 } = require("../models/prescriptionModel");
+const { getMedicineInfo, precacheMedicineInfoAllLangs } = require("../services/medicineInfoService");
 
 exports.createPrescription = async (req, res) => {
   try {
@@ -68,6 +69,19 @@ exports.createPrescription = async (req, res) => {
         custom_duration_text: med.custom_duration_text || null
       });
     }
+
+    // Trigger background pre-caching across all languages
+    setTimeout(async () => {
+      for (const med of medicines) {
+        if (med.medicine_name) {
+          try {
+            await precacheMedicineInfoAllLangs(med.medicine_name, med.medicine_form || 'Tablet', med.dosage || '');
+          } catch (e) {
+            console.warn("Pre-cache note:", e.message);
+          }
+        }
+      }
+    }, 100);
 
     res.status(201).json({ message: "Prescription created" });
   } catch (err) {
