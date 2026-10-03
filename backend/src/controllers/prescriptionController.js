@@ -153,12 +153,12 @@ exports.recordIntake = async (req, res) => {
 
 exports.fetchMedicineInfo = async (req, res) => {
   try {
-    const { name, form, dosage } = req.query;
+    const { name, form, dosage, lang } = req.query;
     if (!name) {
       return res.status(400).json({ message: "Medicine name query parameter is required" });
     }
     const { getMedicineInfo } = require("../services/medicineInfoService");
-    const info = await getMedicineInfo(name, form, dosage);
+    const info = await getMedicineInfo(name, form, dosage, lang || 'en');
     res.json(info);
   } catch (error) {
     console.error("Error fetching medicine info:", error);

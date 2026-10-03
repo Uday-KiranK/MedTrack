@@ -42,12 +42,17 @@ export default function PatientDashboard() {
   const [loadingMeds, setLoadingMeds] = useState(false);
   const [showCalendarMed, setShowCalendarMed] = useState(null);
 
-  // Feature 3: Patient Medicine Info Modal state
+  // Feature 3: Patient Medicine Info Modal & Dedicated Tab state
   const [selectedMedicineInfo, setSelectedMedicineInfo] = useState(null);
   const [medicineDetails, setMedicineDetails] = useState(null);
   const [loadingMedInfo, setLoadingMedInfo] = useState(false);
   const [isSpeakingInfo, setIsSpeakingInfo] = useState(false);
   const [dismissPermissionBanner, setDismissPermissionBanner] = useState(false);
+  const [tabMedInfo, setTabMedInfo] = useState(null);
+  const [activeTabMed, setActiveTabMed] = useState(null);
+  const [searchMedQuery, setSearchMedQuery] = useState('');
+  const [searchingMed, setSearchingMed] = useState(false);
+  const isSpeakingRef = useRef(false);
 
   // Patient Routine state
   const [routine, setRoutine] = useState({
@@ -730,9 +735,111 @@ export default function PatientDashboard() {
     }
   };
 
+  const getTtsLanguage = (lang) => {
+    switch (lang) {
+      case 'te': return 'te-IN';
+      case 'hi': return 'hi-IN';
+      case 'ta': return 'ta-IN';
+      case 'kn': return 'kn-IN';
+      default: return 'en-US';
+    }
+  };
+
+  const stopSpeech = () => {
+    isSpeakingRef.current = false;
+    setIsSpeakingInfo(false);
+    try {
+      Speech.stop();
+    } catch (e) {}
+  };
+
+  const handleSpeechInfo = (info, med) => {
+    if (isSpeakingInfo) {
+      stopSpeech();
+      return;
+    }
+
+    const currentLang = i18n.language || 'en';
+    const ttsLang = getTtsLanguage(currentLang);
+
+    // Build ordered sections
+    const sections = [];
+
+    // 1. Medicine Name & Salt
+    sections.push(`${med?.medicine_name || ''}. ${info?.generic_name ? info.generic_name : ''}`);
+
+    // 2. Uses
+    if (info?.uses) {
+      sections.push(`${t('Primary Uses & Purpose')}: ${info.uses}`);
+    }
+
+    // 3. How & when to take
+    const howTo = info?.howToTake || info?.how_to_take || '';
+    const docInst = med?.food_instruction ? `${t("Doctor's Instruction")}: ${t(med.food_instruction)}.` : '';
+    sections.push(`${t('How & When to Take')}: ${howTo} ${docInst}`);
+
+    // 4. Side effects
+    const side = info?.sideEffects || info?.side_effects || '';
+    if (side) {
+      sections.push(`${t('Common Side Effects & Red Flags')}: ${side}`);
+    }
+
+    // 5. Precautions
+    if (info?.precautions) {
+      sections.push(`${t('Precautions & Warnings')}: ${info.precautions}`);
+    }
+
+    // 6. Dietary Advice
+    const diet = info?.dietaryAdvice || info?.dietary_advice || '';
+    if (diet) {
+      sections.push(`${t('Dietary & Lifestyle Advice')}: ${diet}`);
+    }
+
+    // 7. Missed Dose
+    const missed = info?.missedDose || info?.missed_dose || '';
+    if (missed) {
+      sections.push(`${t('Missed Dose Guidance')}: ${missed}`);
+    }
+
+    // 8. Storage
+    if (info?.storage) {
+      sections.push(`${t('Storage Instructions')}: ${info.storage}`);
+    }
+
+    if (sections.length === 0) return;
+
+    isSpeakingRef.current = true;
+    setIsSpeakingInfo(true);
+
+    let currentIdx = 0;
+    const playNextSection = () => {
+      if (!isSpeakingRef.current || currentIdx >= sections.length) {
+        isSpeakingRef.current = false;
+        setIsSpeakingInfo(false);
+        return;
+      }
+
+      const textChunk = sections[currentIdx];
+      currentIdx++;
+
+      Speech.speak(textChunk, {
+        language: ttsLang,
+        pitch: 1.0,
+        rate: 0.92,
+        onDone: playNextSection,
+        onError: () => playNextSection(),
+        onStopped: () => {
+          isSpeakingRef.current = false;
+          setIsSpeakingInfo(false);
+        }
+      });
+    };
+
+    playNextSection();
+  };
+
   const handleOpenMedicineInfo = (med) => {
     if (!med) return;
-    // Set clinical fallback immediately so modal opens with 0ms delay!
     const fallback = getMedicineInfoDetails(med);
     setSelectedMedicineInfo(med);
     setMedicineDetails(fallback);
@@ -743,9 +850,10 @@ export default function PatientDashboard() {
       params: {
         name: med.medicine_name,
         form: med.medicine_form || 'Tablet',
-        dosage: med.dosage || ''
+        dosage: med.dosage || '',
+        lang: i18n.language || 'en'
       },
-      timeout: 10000
+      timeout: 12000
     }).then((res) => {
       if (res.data) {
         setMedicineDetails(res.data);
@@ -758,28 +866,60 @@ export default function PatientDashboard() {
   };
 
   const handleCloseMedicineInfo = () => {
-    if (isSpeakingInfo) {
-      try { Speech.stop(); } catch (e) {}
-    }
-    setIsSpeakingInfo(false);
+    stopSpeech();
     setSelectedMedicineInfo(null);
     setMedicineDetails(null);
   };
 
-  const handleSpeechInfo = (info, med) => {
-    if (isSpeakingInfo) {
-      try { Speech.stop(); } catch (e) {}
-      setIsSpeakingInfo(false);
-      return;
-    }
+  const handleSelectTabMedicine = (med) => {
+    if (!med) return;
+    setActiveTabMed(med);
+    stopSpeech();
+    const fallback = getMedicineInfoDetails(med);
+    setTabMedInfo(fallback);
+    setSearchingMed(true);
 
-    const textToRead = `${med.medicine_name}. ${info?.generic_name ? 'Composition: ' + info.generic_name + '.' : ''} How and when to take: ${info?.howToTake || info?.how_to_take || ''}. Doctor Instruction: ${med.food_instruction || 'After Food'}. Primary uses: ${info?.uses || ''}.`;
+    axios.get(`${API_URL}/prescriptions/medicine-info`, {
+      params: {
+        name: med.medicine_name,
+        form: med.medicine_form || 'Tablet',
+        dosage: med.dosage || '',
+        lang: i18n.language || 'en'
+      },
+      timeout: 15000
+    }).then((res) => {
+      if (res.data) setTabMedInfo(res.data);
+    }).catch((err) => {
+      console.log("Tab medicine info fetch note:", err.message);
+    }).finally(() => {
+      setSearchingMed(false);
+    });
+  };
 
-    setIsSpeakingInfo(true);
-    Speech.speak(textToRead, {
-      language: i18n.language || 'en',
-      onDone: () => setIsSpeakingInfo(false),
-      onError: () => setIsSpeakingInfo(false)
+  const handleSearchCustomMedicine = (query) => {
+    if (!query || !query.trim()) return;
+    const cleanQuery = query.trim();
+    const mockMed = { medicine_name: cleanQuery, dosage: 'Standard Dose', medicine_form: 'Medicine' };
+    setActiveTabMed(mockMed);
+    stopSpeech();
+    const fallback = getMedicineInfoDetails(mockMed);
+    setTabMedInfo(fallback);
+    setSearchingMed(true);
+
+    axios.get(`${API_URL}/prescriptions/medicine-info`, {
+      params: {
+        name: cleanQuery,
+        form: 'Tablet',
+        dosage: '',
+        lang: i18n.language || 'en'
+      },
+      timeout: 18000
+    }).then((res) => {
+      if (res.data) setTabMedInfo(res.data);
+    }).catch((err) => {
+      console.log("Custom search medicine error:", err.message);
+    }).finally(() => {
+      setSearchingMed(false);
     });
   };
 
@@ -876,6 +1016,18 @@ export default function PatientDashboard() {
           onPress={() => setTab('prescriptions')}
         >
           <Text style={[styles.tabText, tab === 'prescriptions' && styles.activeTabText]}>{t('My Medications')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.tab, tab === 'medicine_info' && styles.activeTab]}
+          onPress={() => {
+            setTab('medicine_info');
+            if (!activeTabMed && medicines.length > 0) {
+              handleSelectTabMedicine(medicines[0]);
+            }
+          }}
+        >
+          <Text style={[styles.tabText, tab === 'medicine_info' && styles.activeTabText]}>💊 {t('Medicine Info')}</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -980,9 +1132,12 @@ export default function PatientDashboard() {
                     <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
                       <TouchableOpacity 
                         style={[styles.showHistoryBtn, { flex: 1, marginTop: 0 }]}
-                        onPress={() => handleOpenMedicineInfo(item)}
+                        onPress={() => {
+                          setTab('medicine_info');
+                          handleSelectTabMedicine(item);
+                        }}
                       >
-                        <Text style={styles.showHistoryBtnText}>ℹ️ Medicine Info</Text>
+                        <Text style={styles.showHistoryBtnText}>ℹ️ {t('Medicine Info')}</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity 
@@ -998,6 +1153,163 @@ export default function PatientDashboard() {
               ListEmptyComponent={<Text style={styles.emptyText}>{t('No prescribed medications found.')}</Text>}
             />
           )
+        ) : tab === 'medicine_info' ? (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+            {/* Search Input */}
+            <View style={styles.searchBarContainer}>
+              <TextInput
+                style={styles.searchBarInput}
+                placeholder={t('Search any medicine...')}
+                placeholderTextColor="#64748B"
+                value={searchMedQuery}
+                onChangeText={setSearchMedQuery}
+                onSubmitEditing={() => handleSearchCustomMedicine(searchMedQuery)}
+                returnKeyType="search"
+              />
+              <TouchableOpacity 
+                style={styles.searchBtn} 
+                onPress={() => handleSearchCustomMedicine(searchMedQuery)}
+                disabled={searchingMed}
+              >
+                {searchingMed ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.searchBtnText}>🔍 {t('Search')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Prescribed for You Chips (Deduplicated) */}
+            {(() => {
+              const uniquePrescribedMeds = Array.from(
+                new Map(medicines.map(m => [(m.medicine_name || '').toLowerCase().trim(), m])).values()
+              );
+              if (uniquePrescribedMeds.length === 0) return null;
+              return (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={styles.sectionHeader}>📋 {t('Prescribed for You')}:</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 6 }}>
+                    {uniquePrescribedMeds.map((med) => {
+                      const isSelected = activeTabMed?.medicine_name?.toLowerCase().trim() === med.medicine_name?.toLowerCase().trim();
+                      return (
+                        <TouchableOpacity
+                          key={med.id}
+                          style={[styles.medChip, isSelected && styles.medChipActive]}
+                          onPress={() => handleSelectTabMedicine(med)}
+                        >
+                          <Text style={[styles.medChipText, isSelected && styles.medChipTextActive]}>
+                            💊 {med.medicine_name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              );
+            })()}
+
+            {/* Detailed Medicine View or Empty State */}
+            {activeTabMed ? (() => {
+              const info = tabMedInfo || getMedicineInfoDetails(activeTabMed);
+              return (
+                <View style={styles.infoTabCard}>
+                  <View style={styles.tabMedHeaderRow}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={styles.tabMedTitle}>💊 {activeTabMed.medicine_name}</Text>
+                      <Text style={styles.tabMedSub}>
+                        {info?.generic_name ? `Salt: ${info.generic_name}` : `${activeTabMed.dosage || ''} • ${activeTabMed.medicine_form || 'Tablet'}`}
+                      </Text>
+                    </View>
+                    {info?.isAiGenerated ? (
+                      <View style={styles.aiBadge}>
+                        <Text style={styles.aiBadgeText}>🤖 AI Verified</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {searchingMed && !tabMedInfo?.isAiGenerated ? (
+                    <View style={styles.aiLoadingBanner}>
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                      <Text style={styles.aiLoadingText}>🤖 Translating & verifying clinical composition in {i18n.language.toUpperCase()}...</Text>
+                    </View>
+                  ) : null}
+
+                  {/* Sequential Speech Audio Readout in Regional Language */}
+                  <TouchableOpacity 
+                    style={[styles.speechBtn, isSpeakingInfo && styles.speechBtnActive]}
+                    onPress={() => handleSpeechInfo(info, activeTabMed)}
+                  >
+                    <Text style={[styles.speechBtnText, isSpeakingInfo && styles.speechBtnTextActive]}>
+                      {isSpeakingInfo ? `🛑 ${t('Stop Reading')}` : `🔊 ${t('Listen Audio Instructions')}`}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* 1. Primary Uses */}
+                  <View style={styles.infoBox}>
+                    <Text style={styles.infoBoxTitle}>🎯 {t('Primary Uses & Purpose')}</Text>
+                    <Text style={styles.infoBoxText}>{info?.uses}</Text>
+                  </View>
+
+                  {/* 2. How & When to Take */}
+                  <View style={styles.infoBox}>
+                    <Text style={styles.infoBoxTitle}>🕒 {t('How & When to Take')}</Text>
+                    <Text style={styles.infoBoxText}>{info?.howToTake || info?.how_to_take}</Text>
+                    {activeTabMed.food_instruction ? (
+                      <Text style={[styles.infoBoxText, { marginTop: 6, fontWeight: '700', color: COLORS.primary }]}>
+                        {t("Doctor's Instruction")}: {t(activeTabMed.food_instruction)} (~10 min gap)
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {/* 3. Side Effects */}
+                  <View style={styles.infoBox}>
+                    <Text style={styles.infoBoxTitle}>⚠️ {t('Common Side Effects & Red Flags')}</Text>
+                    <Text style={styles.infoBoxText}>{info?.sideEffects || info?.side_effects}</Text>
+                  </View>
+
+                  {/* 4. Precautions */}
+                  <View style={styles.infoBox}>
+                    <Text style={styles.infoBoxTitle}>🛡️ {t('Precautions & Warnings')}</Text>
+                    <Text style={styles.infoBoxText}>{info?.precautions}</Text>
+                  </View>
+
+                  {/* 5. Dietary Advice */}
+                  {(info?.dietaryAdvice || info?.dietary_advice) ? (
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>🥗 {t('Dietary & Lifestyle Advice')}</Text>
+                      <Text style={styles.infoBoxText}>{info?.dietaryAdvice || info?.dietary_advice}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* 6. Missed Dose */}
+                  {(info?.missedDose || info?.missed_dose) ? (
+                    <View style={styles.infoBox}>
+                      <Text style={styles.infoBoxTitle}>⏰ {t('Missed Dose Guidance')}</Text>
+                      <Text style={styles.infoBoxText}>{info?.missedDose || info?.missed_dose}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* 7. Storage */}
+                  <View style={styles.infoBox}>
+                    <Text style={styles.infoBoxTitle}>📦 {t('Storage Instructions')}</Text>
+                    <Text style={styles.infoBoxText}>{info?.storage}</Text>
+                  </View>
+
+                  <Text style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 12, fontStyle: 'italic' }}>
+                    {t('disclaimer_text')}
+                  </Text>
+                </View>
+              );
+            })() : (
+              <View style={styles.emptyGuideCard}>
+                <Text style={{ fontSize: 44, marginBottom: 12 }}>💊</Text>
+                <Text style={styles.emptyGuideTitle}>{t('No medicine selected')}</Text>
+                <Text style={styles.emptyGuideText}>
+                  {t('Select a medicine above or search to view complete details')}
+                </Text>
+              </View>
+            )}
+          </ScrollView>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.uploadSection}>
@@ -1069,7 +1381,7 @@ export default function PatientDashboard() {
                   {loadingMedInfo && !medicineDetails?.isAiGenerated ? (
                     <View style={styles.aiLoadingBanner}>
                       <ActivityIndicator size="small" color={COLORS.primary} />
-                      <Text style={styles.aiLoadingText}>🤖 AI verifying clinical composition...</Text>
+                      <Text style={styles.aiLoadingText}>🤖 {t('translating_clinical') || 'AI verifying clinical composition...'}</Text>
                     </View>
                   ) : null}
 
@@ -1083,61 +1395,61 @@ export default function PatientDashboard() {
                       onPress={() => handleSpeechInfo(info, selectedMedicineInfo)}
                     >
                       <Text style={[styles.speechBtnText, isSpeakingInfo && styles.speechBtnTextActive]}>
-                        {isSpeakingInfo ? '🛑 Stop Reading' : '🔊 Listen Audio Instructions'}
+                        {isSpeakingInfo ? `🛑 ${t('Stop Reading')}` : `🔊 ${t('Listen Audio Instructions')}`}
                       </Text>
                     </TouchableOpacity>
 
                     <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>🎯 Primary Uses & Purpose</Text>
+                      <Text style={styles.infoBoxTitle}>🎯 {t('Primary Uses & Purpose')}</Text>
                       <Text style={styles.infoBoxText}>{info?.uses}</Text>
                     </View>
 
                     <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>🕒 How & When to Take</Text>
+                      <Text style={styles.infoBoxTitle}>🕒 {t('How & When to Take')}</Text>
                       <Text style={styles.infoBoxText}>{info?.howToTake || info?.how_to_take}</Text>
                       <Text style={[styles.infoBoxText, { marginTop: 6, fontWeight: '700', color: COLORS.primary }]}>
-                        Doctor's Instruction: {selectedMedicineInfo.food_instruction || 'After Food'} (~10 min gap)
+                        {t("Doctor's Instruction")}: {t(selectedMedicineInfo.food_instruction || 'After Food')} (~10 min gap)
                       </Text>
                     </View>
 
                     <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>⚠️ Common Side Effects & Red Flags</Text>
+                      <Text style={styles.infoBoxTitle}>⚠️ {t('Common Side Effects & Red Flags')}</Text>
                       <Text style={styles.infoBoxText}>{info?.sideEffects || info?.side_effects}</Text>
                     </View>
 
                     <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>🛡️ Precautions & Warnings</Text>
+                      <Text style={styles.infoBoxTitle}>🛡️ {t('Precautions & Warnings')}</Text>
                       <Text style={styles.infoBoxText}>{info?.precautions}</Text>
                     </View>
 
                     {(info?.dietaryAdvice || info?.dietary_advice) ? (
                       <View style={styles.infoBox}>
-                        <Text style={styles.infoBoxTitle}>🥗 Dietary & Lifestyle Advice</Text>
+                        <Text style={styles.infoBoxTitle}>🥗 {t('Dietary & Lifestyle Advice')}</Text>
                         <Text style={styles.infoBoxText}>{info?.dietaryAdvice || info?.dietary_advice}</Text>
                       </View>
                     ) : null}
 
                     {(info?.missedDose || info?.missed_dose) ? (
                       <View style={styles.infoBox}>
-                        <Text style={styles.infoBoxTitle}>⏰ Missed Dose Guidance</Text>
+                        <Text style={styles.infoBoxTitle}>⏰ {t('Missed Dose Guidance')}</Text>
                         <Text style={styles.infoBoxText}>{info?.missedDose || info?.missed_dose}</Text>
                       </View>
                     ) : null}
 
                     <View style={styles.infoBox}>
-                      <Text style={styles.infoBoxTitle}>📦 Storage Instructions</Text>
+                      <Text style={styles.infoBoxTitle}>📦 {t('Storage Instructions')}</Text>
                       <Text style={styles.infoBoxText}>{info?.storage}</Text>
                     </View>
 
                     <Text style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginVertical: 8, fontStyle: 'italic' }}>
-                      Note: Informational medical insights. Always follow your physician's specific instructions.
+                      {t('disclaimer_text')}
                     </Text>
 
                     <TouchableOpacity 
                       style={[styles.saveRoutineBtn, { marginTop: 8 }]} 
                       onPress={handleCloseMedicineInfo}
                     >
-                      <Text style={styles.saveRoutineBtnText}>✓ Got it, Close</Text>
+                      <Text style={styles.saveRoutineBtnText}>✓ {t('Close')}</Text>
                     </TouchableOpacity>
                   </ScrollView>
                 </View>
@@ -1176,13 +1488,13 @@ export default function PatientDashboard() {
         <View style={styles.modalOverlay}>
           <View style={styles.routineModalCard}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.routineModalTitle}>Welcome! Set Your Daily Routine ☀️</Text>
+              <Text style={styles.routineModalTitle}>{t('Welcome! Set Your Daily Routine')} ☀️</Text>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
-              <Text style={styles.routineModalSub}>Please set your usual meal times so MedTrack can schedule your medication alarms accurately.</Text>
+              <Text style={styles.routineModalSub}>{t('Please set your usual meal times so MedTrack can schedule your medication alarms accurately.')}</Text>
 
-              <Text style={styles.routineLabel}>Breakfast Time (HH:MM)</Text>
+              <Text style={styles.routineLabel}>{t('Breakfast Time')} (HH:MM)</Text>
               <TextInput 
                 style={styles.routineInput} 
                 value={routine.breakfast_time} 
@@ -1191,7 +1503,7 @@ export default function PatientDashboard() {
                 placeholderTextColor="#64748B"
               />
 
-              <Text style={styles.routineLabel}>Lunch Time (HH:MM)</Text>
+              <Text style={styles.routineLabel}>{t('Lunch Time')} (HH:MM)</Text>
               <TextInput 
                 style={styles.routineInput} 
                 value={routine.lunch_time} 
@@ -1200,7 +1512,7 @@ export default function PatientDashboard() {
                 placeholderTextColor="#64748B"
               />
 
-              <Text style={styles.routineLabel}>Dinner Time (HH:MM)</Text>
+              <Text style={styles.routineLabel}>{t('Dinner Time')} (HH:MM)</Text>
               <TextInput 
                 style={styles.routineInput} 
                 value={routine.dinner_time} 
@@ -1209,7 +1521,7 @@ export default function PatientDashboard() {
                 placeholderTextColor="#64748B"
               />
 
-              <Text style={styles.routineLabel}>Bedtime (HH:MM)</Text>
+              <Text style={styles.routineLabel}>{t('Bedtime')} (HH:MM)</Text>
               <TextInput 
                 style={styles.routineInput} 
                 value={routine.bedtime} 
@@ -1219,7 +1531,7 @@ export default function PatientDashboard() {
               />
 
               <TouchableOpacity style={styles.saveRoutineBtn} onPress={() => handleSaveRoutine(true)} disabled={savingRoutine}>
-                {savingRoutine ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveRoutineBtnText}>Save & Get Started</Text>}
+                {savingRoutine ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveRoutineBtnText}>{t('Save & Get Started')}</Text>}
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -1231,14 +1543,14 @@ export default function PatientDashboard() {
         <View style={styles.modalOverlay}>
           <View style={styles.routineModalCard}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.routineModalTitle}>⚙️ Routine & Alarm Settings</Text>
+              <Text style={styles.routineModalTitle}>⚙️ {t('Routine & Alarm Settings')}</Text>
               <TouchableOpacity onPress={() => { stopSound(); setSettingsModalVisible(false); }}>
                 <Text style={styles.closeModalCross}>✕</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
-              <Text style={styles.routineLabel}>Breakfast Time (HH:MM)</Text>
+              <Text style={styles.routineLabel}>{t('Breakfast Time')} (HH:MM)</Text>
               <TextInput 
                 style={styles.routineInput} 
                 value={routine.breakfast_time} 
@@ -1247,7 +1559,7 @@ export default function PatientDashboard() {
                 placeholderTextColor="#64748B"
               />
 
-              <Text style={styles.routineLabel}>Lunch Time (HH:MM)</Text>
+              <Text style={styles.routineLabel}>{t('Lunch Time')} (HH:MM)</Text>
               <TextInput 
                 style={styles.routineInput} 
                 value={routine.lunch_time} 
@@ -1256,7 +1568,7 @@ export default function PatientDashboard() {
                 placeholderTextColor="#64748B"
               />
 
-              <Text style={styles.routineLabel}>Dinner Time (HH:MM)</Text>
+              <Text style={styles.routineLabel}>{t('Dinner Time')} (HH:MM)</Text>
               <TextInput 
                 style={styles.routineInput} 
                 value={routine.dinner_time} 
@@ -1265,7 +1577,7 @@ export default function PatientDashboard() {
                 placeholderTextColor="#64748B"
               />
 
-              <Text style={styles.routineLabel}>Bedtime (HH:MM)</Text>
+              <Text style={styles.routineLabel}>{t('Bedtime')} (HH:MM)</Text>
               <TextInput 
                 style={styles.routineInput} 
                 value={routine.bedtime} 
@@ -1274,14 +1586,14 @@ export default function PatientDashboard() {
                 placeholderTextColor="#64748B"
               />
 
-              <Text style={styles.routineLabel}>Select Global Ringtone 🎵</Text>
+              <Text style={styles.routineLabel}>{t('Select Global Ringtone')} 🎵</Text>
               <View style={{ marginBottom: 12 }}>
                 <TouchableOpacity 
                   style={[styles.ringtoneOption, (routine.ringtone_uri === 'default' || !routine.ringtone_uri) && styles.ringtoneOptionActive]}
                   onPress={() => setRoutine({ ...routine, ringtone_uri: 'default' })}
                 >
                   <Text style={[styles.ringtoneText, (routine.ringtone_uri === 'default' || !routine.ringtone_uri) && styles.ringtoneTextActive]}>
-                    {(routine.ringtone_uri === 'default' || !routine.ringtone_uri) ? '✓ ' : ''}Default Beep 🔔
+                    {(routine.ringtone_uri === 'default' || !routine.ringtone_uri) ? '✓ ' : ''}{t('Default Beep')} 🔔
                   </Text>
                 </TouchableOpacity>
 
@@ -1290,13 +1602,13 @@ export default function PatientDashboard() {
                   onPress={handlePickRingtone}
                 >
                   <Text style={[styles.ringtoneText, routine.ringtone_uri !== 'default' && routine.ringtone_uri !== '' && styles.ringtoneTextActive]}>
-                    {routine.ringtone_uri !== 'default' && routine.ringtone_uri !== '' ? '✓ Custom Audio: ' + (customRingtoneName || 'Selected') : '🎵 Upload Custom Ringtone'}
+                    {routine.ringtone_uri !== 'default' && routine.ringtone_uri !== '' ? '✓ Custom Audio: ' + (customRingtoneName || 'Selected') : `🎵 ${t('Upload Custom Ringtone')}`}
                   </Text>
                 </TouchableOpacity>
               </View>
 
               <TouchableOpacity style={styles.saveRoutineBtn} onPress={() => handleSaveRoutine(false)} disabled={savingRoutine}>
-                {savingRoutine ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveRoutineBtnText}>Save Changes</Text>}
+                {savingRoutine ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveRoutineBtnText}>{t('Save Changes')}</Text>}
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -1716,17 +2028,6 @@ const styles = StyleSheet.create({
   calendarStartCell: { borderColor: '#F59E0B', borderWidth: 2 },
   calendarStartCellText: { fontWeight: '800' },
   calendarStartStar: { position: 'absolute', bottom: -1, fontSize: 8, color: '#D97706' },
-  routineModalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    width: '92%',
-    maxWidth: 450,
-    height: '82%',
-    maxHeight: '88%',
-    alignSelf: 'center',
-    ...SHADOWS.large,
-  },
   medicineInfoCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
@@ -1765,18 +2066,6 @@ const styles = StyleSheet.create({
     color: '#0D9488',
     fontWeight: '600',
   },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    paddingBottom: 10,
-  },
-  routineModalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.primary },
-  routineModalSub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
-  closeModalCross: { fontSize: 22, color: '#64748B', fontWeight: 'bold', padding: 4 },
   speechBtn: {
     backgroundColor: '#EEF2FF',
     borderWidth: 1.5,
@@ -1809,4 +2098,124 @@ const styles = StyleSheet.create({
   },
   infoBoxTitle: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginBottom: 4 },
   infoBoxText: { fontSize: 13, color: '#334155', lineHeight: 18 },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  searchBarInput: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  searchBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  sectionHeader: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 8,
+  },
+  medChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    ...SHADOWS.small,
+  },
+  medChipActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: COLORS.primary,
+  },
+  medChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  medChipTextActive: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  infoTabCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    ...SHADOWS.medium,
+    marginBottom: 24,
+  },
+  tabMedHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 10,
+  },
+  tabMedTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  tabMedSub: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  aiBadge: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#5EEAD4',
+  },
+  aiBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  emptyGuideCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    ...SHADOWS.small,
+  },
+  emptyGuideTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 6,
+  },
+  emptyGuideText: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
 });

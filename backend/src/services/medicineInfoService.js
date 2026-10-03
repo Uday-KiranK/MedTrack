@@ -93,7 +93,15 @@ function getRuleBasedFallback(medicineName, medicineForm = 'Tablet', dosage = ''
   };
 }
 
-async function fetchMedicineInfoFromAI(medicineName, medicineForm, dosage) {
+const LANG_NAMES = {
+  en: "English",
+  te: "Telugu (తెలుగు)",
+  hi: "Hindi (हिंदी)",
+  ta: "Tamil (தமிழ்)",
+  kn: "Kannada (ಕನ್ನಡ)"
+};
+
+async function fetchMedicineInfoFromAI(medicineName, medicineForm, dosage, lang = 'en') {
   const isOpenRouter = currentProvider === "openrouter";
   const url = isOpenRouter
     ? "https://openrouter.ai/api/v1/chat/completions"
@@ -109,22 +117,28 @@ async function fetchMedicineInfoFromAI(medicineName, medicineForm, dosage) {
     headers["X-Title"] = "MedTrack";
   }
 
-  const systemPrompt = `You are an expert clinical pharmacologist and medical AI assistant for patients.
-Return ONLY valid JSON matching the requested structure. No explanations, no markdown tags.`;
+  const targetLang = LANG_NAMES[lang] || "English";
+
+  const systemPrompt = `You are an expert clinical pharmacologist and patient medical AI assistant.
+Return ONLY valid JSON matching the requested structure. No markdown formatting, no backticks.
+All explanation text MUST be written naturally in ${targetLang}.`;
 
   const userPrompt = `Provide comprehensive, accurate, patient-friendly medical information for the medicine: "${medicineName}" (Form: ${medicineForm || 'Tablet'}, Dosage: ${dosage || 'as prescribed'}).
+
+LANGUAGE REQUIREMENT:
+All explanation fields (uses, howToTake, sideEffects, precautions, dietaryAdvice, missedDose, storage) MUST be written naturally and clearly in ${targetLang}.
 
 Return ONLY this JSON object structure:
 {
   "medicine_name": "${medicineName}",
   "generic_name": "Active salt/ingredient composition (e.g. Paracetamol 650mg)",
-  "uses": "Clear 2-3 sentence explanation of primary medical uses, conditions treated, and benefits.",
-  "howToTake": "Detailed instructions on how to take/administer, meal relationships (e.g. take with water, after meals), best time of day.",
-  "sideEffects": "Common mild side effects and critical red-flag warnings to watch out for.",
-  "precautions": "Important medical warnings, alcohol avoidance, pregnancy/breastfeeding advice, driving precautions, and medical history considerations.",
-  "dietaryAdvice": "Foods, drinks, or supplements to take or avoid with this medication (e.g. alcohol, dairy, grapefruit, hydration).",
-  "missedDose": "Clear guidance on what the patient should do if they forget a dose.",
-  "storage": "Proper storage conditions (temperature, light, moisture, child safety)."
+  "uses": "Clear explanation in ${targetLang} of primary medical uses, conditions treated, and benefits.",
+  "howToTake": "Detailed instructions in ${targetLang} on how to take/administer, meal relationships (e.g. take with water, after meals), best time of day.",
+  "sideEffects": "Common mild side effects and critical red-flag warnings in ${targetLang} to watch out for.",
+  "precautions": "Important medical warnings, alcohol avoidance, pregnancy/breastfeeding advice in ${targetLang}.",
+  "dietaryAdvice": "Foods, drinks, or supplements to take or avoid with this medication in ${targetLang}.",
+  "missedDose": "Clear guidance in ${targetLang} on what the patient should do if they forget a dose.",
+  "storage": "Proper storage conditions in ${targetLang} (temperature, light, moisture, child safety)."
 }`;
 
   const response = await axios.post(url, {
@@ -134,7 +148,7 @@ Return ONLY this JSON object structure:
       { role: "user", content: userPrompt }
     ],
     temperature: 0.2,
-    max_tokens: 1000
+    max_tokens: 1100
   }, { headers, timeout: 35000 });
 
   const raw = response.data.choices[0].message.content.trim();
@@ -142,30 +156,33 @@ Return ONLY this JSON object structure:
   try {
     const parsed = JSON.parse(cleaned);
     parsed.isAiGenerated = true;
+    parsed.lang = lang;
     return parsed;
   } catch (e) {
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
       const parsed = JSON.parse(match[0]);
       parsed.isAiGenerated = true;
+      parsed.lang = lang;
       return parsed;
     }
     throw new Error("Failed to parse JSON from AI response");
   }
 }
 
-async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '') {
+async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '', lang = 'en') {
   if (!medicineName) return null;
   const nameLower = medicineName.trim().toLowerCase();
+  const cacheKey = `${nameLower}_${lang || 'en'}`;
 
   // 1. Check PostgreSQL Cache
   try {
     const cached = await pool.query(
       "SELECT * FROM medicine_info_cache WHERE medicine_name_lower = $1",
-      [nameLower]
+      [cacheKey]
     );
     if (cached.rows.length > 0) {
-      console.log(`⚡ Cache hit for medicine info: "${medicineName}"`);
+      console.log(`⚡ Cache hit for medicine info: "${cacheKey}"`);
       const row = cached.rows[0];
       return {
         medicine_name: medicineName,
@@ -177,7 +194,8 @@ async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '
         dietaryAdvice: row.dietary_advice,
         missedDose: row.missed_dose,
         storage: row.storage,
-        isAiGenerated: true
+        isAiGenerated: true,
+        lang: lang
       };
     }
   } catch (err) {
@@ -187,10 +205,10 @@ async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '
   // 2. Rule-based fallback as backup
   const ruleResult = getRuleBasedFallback(medicineName, medicineForm, dosage);
 
-  // 3. AI Fetch via Groq/OpenRouter
+  // 3. AI Fetch via Groq/OpenRouter with target language
   try {
-    console.log(`🤖 Fetching AI medicine info for: "${medicineName}"...`);
-    const aiResult = await fetchMedicineInfoFromAI(medicineName, medicineForm, dosage);
+    console.log(`🤖 Fetching AI medicine info for: "${medicineName}" in ${lang}...`);
+    const aiResult = await fetchMedicineInfoFromAI(medicineName, medicineForm, dosage, lang);
 
     if (aiResult) {
       // Save to DB cache
@@ -210,7 +228,7 @@ async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '
             storage = EXCLUDED.storage,
             raw_json = EXCLUDED.raw_json
         `, [
-          nameLower,
+          cacheKey,
           aiResult.generic_name || '',
           aiResult.uses || '',
           aiResult.howToTake || '',
@@ -221,7 +239,7 @@ async function getMedicineInfo(medicineName, medicineForm = 'Tablet', dosage = '
           aiResult.storage || '',
           JSON.stringify(aiResult)
         ]);
-        console.log(`✅ Saved "${medicineName}" to DB cache.`);
+        console.log(`✅ Saved "${cacheKey}" to DB cache.`);
       } catch (saveErr) {
         console.error("DB cache save error:", saveErr.message);
       }
