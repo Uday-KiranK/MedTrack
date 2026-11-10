@@ -7,6 +7,7 @@ const prescriptionRoutes = require("./routes/prescriptionRoutes");
 const labRoutes = require("./routes/labRoutes");
 const doctorRoutes = require("./routes/doctorRoutes");
 const inventoryRoutes = require("./routes/inventoryRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use("/api/prescriptions", prescriptionRoutes);
 app.use("/api/labs", labRoutes);
 app.use("/api/doctor", doctorRoutes);
 app.use("/api/inventory", inventoryRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.get("/", (req, res) => {
   res.send("MedTrack Backend Running");

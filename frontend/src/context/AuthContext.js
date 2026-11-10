@@ -56,6 +56,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
+        pendingApproval: !!error.response?.data?.pendingApproval,
         message: error.response?.data?.message || 'Login failed'
       };
     } finally {
@@ -73,6 +74,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
+        pendingApproval: !!error.response?.data?.pendingApproval,
         message: error.response?.data?.message || 'Phone login failed'
       };
     } finally {
@@ -87,6 +89,13 @@ export const AuthProvider = ({ children }) => {
         phone,
         otp
       });
+      if (response.data?.pendingApproval && !response.data?.token) {
+        return {
+          success: true,
+          pendingApproval: true,
+          message: response.data.message || 'Account verified and pending Admin approval.'
+        };
+      }
       const { token, user } = response.data;
       await AsyncStorage.setItem('userToken', token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -96,6 +105,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
+        pendingApproval: !!error.response?.data?.pendingApproval,
         message: error.response?.data?.message || 'OTP verification failed'
       };
     } finally {
@@ -103,7 +113,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (name, email, phone, password, role) => {
+  const register = async (name, email, phone, password, role, extra = {}) => {
     setIsLoading(true);
     try {
       const response = await axios.post(`${API_URL}/auth/register`, {
@@ -111,9 +121,17 @@ export const AuthProvider = ({ children }) => {
         email,
         phone,
         password,
-        role, // "doctor" or "patient"
+        role,
+        organizationCode: extra.organizationCode || undefined,
+        specialization: extra.specialization || undefined,
       });
-      return { success: true, requiresOtp: response.data.requiresOtp, phone: response.data.phone };
+      return {
+        success: true,
+        requiresOtp: response.data.requiresOtp,
+        pendingApproval: !!response.data.pendingApproval,
+        phone: response.data.phone,
+        message: response.data.message,
+      };
     } catch (error) {
       return {
         success: false,
@@ -121,6 +139,23 @@ export const AuthProvider = ({ children }) => {
       };
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const hasPermission = (perm) => {
+    if (!userInfo) return false;
+    if (userInfo.is_superadmin && userInfo.role === 'admin') return true;
+    return Array.isArray(userInfo.permissions) && userInfo.permissions.includes(perm);
+  };
+
+  const refreshUser = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/auth/protected`);
+      if (response.data?.user) {
+        setUserInfo(response.data.user);
+      }
+    } catch (e) {
+      console.log('Refresh user note:', e.message);
     }
   };
 
@@ -145,6 +180,9 @@ export const AuthProvider = ({ children }) => {
       verifyOtp,
       logout,
       register,
+      hasPermission,
+      refreshUser,
+      setUserInfo,
       userToken,
       userInfo,
       isLoading,

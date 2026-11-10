@@ -1,7 +1,9 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { createUser, findUserByEmail, findUserByPhone } = require("../models/userModel");
+const { createUser, findUserByEmail, findUserByPhone, findOrganizationByCode } = require("../models/userModel");
 const { sendOtpSms } = require("../utils/smsHelper");
+const { SELF_REGISTER_ROLES, getDefaultPermissionsForRole } = require("../utils/permissions");
+const { logAuditEvent } = require("../utils/auditHelper");
 
 // Mock OTP Store
 const mockOtpStore = {};
@@ -12,17 +14,55 @@ const normalizePhoneKey = (phone) => {
   return digits.length >= 10 ? digits.slice(-10) : digits;
 };
 
+const formatAuthUser = (user) => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  status: user.status || 'active',
+  organization_id: user.organization_id || 1,
+  is_superadmin: !!user.is_superadmin,
+  permissions: Array.isArray(user.permissions) && user.permissions.length > 0
+    ? user.permissions
+    : getDefaultPermissionsForRole(user.role),
+  specialization: user.specialization || null,
+  phone: user.phone,
+  breakfast_time: user.breakfast_time || '08:00',
+  lunch_time: user.lunch_time || '13:30',
+  dinner_time: user.dinner_time || '20:30',
+  bedtime: user.bedtime || '22:00',
+  ringtone_uri: user.ringtone_uri || 'default',
+  routine_configured: user.routine_configured || false
+});
+
+const checkAccountStatus = (user, res) => {
+  if (user.status === "pending_approval") {
+    res.status(403).json({
+      pendingApproval: true,
+      message: "Your staff account is pending Admin approval. Please wait for your Clinic Admin to approve your access."
+    });
+    return false;
+  }
+  if (user.status && user.status !== "active") {
+    res.status(403).json({
+      message: "Your account is suspended or removed. Please contact your Clinic Admin."
+    });
+    return false;
+  }
+  return true;
+};
+
 // REGISTER
 exports.register = async (req, res) => {
   try {
-    const { name, email, phone, password, role } = req.body;
+    const { name, email, phone, password, role, organizationCode, specialization } = req.body;
 
     if (!name || !email || !phone || !password || !role) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    if (!["doctor", "patient"].includes(role)) {
-      return res.status(400).json({ message: "Invalid role" });
+    if (!SELF_REGISTER_ROLES.includes(role)) {
+      return res.status(400).json({ message: "Invalid role for self-registration" });
     }
 
     const existingUser = await findUserByEmail(email);
@@ -34,8 +74,34 @@ exports.register = async (req, res) => {
       return res.status(409).json({ message: "Phone already registered" });
     }
 
+    let organizationId = 1;
+    if (organizationCode && organizationCode.trim()) {
+      const org = await findOrganizationByCode(organizationCode);
+      if (!org) {
+        return res.status(404).json({ message: "Invalid clinic/organization code" });
+      }
+      organizationId = org.id;
+    }
+
+    const isStaff = role !== "patient";
+    const status = isStaff ? "pending_approval" : "active";
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await createUser(name, email, phone, hashedPassword, role);
+    const user = await createUser(name, email, phone, hashedPassword, role, {
+      organizationId,
+      status,
+      permissions: getDefaultPermissionsForRole(role),
+      specialization: role === "doctor" ? (specialization || null) : null
+    });
+
+    if (isStaff) {
+      await logAuditEvent({
+        organizationId,
+        actorId: user.id,
+        action: "staff_registration_requested",
+        targetUserId: user.id,
+        details: { role, name, email }
+      });
+    }
 
     // Generate OTP
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -49,8 +115,11 @@ exports.register = async (req, res) => {
     });
 
     res.status(201).json({
-      message: "User registered successfully. OTP sent.",
+      message: isStaff
+        ? "Staff registration submitted. Verify OTP, then wait for Clinic Admin approval."
+        : "User registered successfully. OTP sent.",
       requiresOtp: true,
+      pendingApproval: isStaff,
       phone: user.phone
     });
   } catch (error) {
@@ -71,6 +140,8 @@ exports.login = async (req, res) => {
       if (!user) {
         return res.status(401).json({ message: "User not found with this phone number" });
       }
+
+      if (!checkAccountStatus(user, res)) return;
 
       // Generate OTP
       const otp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -105,26 +176,16 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    if (!checkAccountStatus(user, res)) return;
+
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, organization_id: user.organization_id || 1 },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
     res.json({ 
       token,
-      user: { 
-        id: user.id, 
-        email: user.email, 
-        name: user.name, 
-        role: user.role, 
-        phone: user.phone,
-        breakfast_time: user.breakfast_time || '08:00',
-        lunch_time: user.lunch_time || '13:30',
-        dinner_time: user.dinner_time || '20:30',
-        bedtime: user.bedtime || '22:00',
-        ringtone_uri: user.ringtone_uri || 'default',
-        routine_configured: user.routine_configured || false
-      }
+      user: formatAuthUser(user)
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -159,27 +220,25 @@ exports.verifyOtp = async (req, res) => {
        return res.status(404).json({ message: "User not found" });
     }
 
+    if (user.status === "pending_approval") {
+      return res.json({
+        verified: true,
+        pendingApproval: true,
+        message: "Phone verified! Your staff account is pending approval by your Clinic Admin."
+      });
+    }
+
+    if (!checkAccountStatus(user, res)) return;
+
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, organization_id: user.organization_id || 1 },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
     res.json({ 
       token,
-      user: { 
-        id: user.id, 
-        email: user.email, 
-        name: user.name, 
-        role: user.role, 
-        phone: user.phone,
-        breakfast_time: user.breakfast_time || '08:00',
-        lunch_time: user.lunch_time || '13:30',
-        dinner_time: user.dinner_time || '20:30',
-        bedtime: user.bedtime || '22:00',
-        ringtone_uri: user.ringtone_uri || 'default',
-        routine_configured: user.routine_configured || false
-      }
+      user: formatAuthUser(user)
     });
   } catch(error) {
     console.error("Verify OTP error:", error);
@@ -193,7 +252,7 @@ exports.getProtected = async (req, res) => {
     const { findUserById } = require("../models/userModel");
     const user = await findUserById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found" });
-    res.json({ user });
+    res.json({ user: formatAuthUser(user) });
   } catch(error) {
     console.error("Protected Route Error:", error);
     res.status(500).json({ message: "Server error loading protected route" });
