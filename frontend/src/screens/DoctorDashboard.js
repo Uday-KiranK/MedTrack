@@ -10,8 +10,8 @@ import LanguageSelectorModal, { LanguageButton } from '../components/LanguageSel
 
 export default function DoctorDashboard() {
   const { t, i18n } = useTranslation();
-  const { logout, userInfo } = useContext(AuthContext);
-  const [tab, setTab] = useState('create'); // 'create' | 'patients' | 'inventory'
+  const { logout, userInfo, hasPermission } = useContext(AuthContext);
+  const [tab, setTab] = useState('create'); // 'create' | 'patients' | 'stock'
   const [langModalVisible, setLangModalVisible] = useState(false);
 
   const DOSAGE_PRESETS = {
@@ -80,6 +80,53 @@ export default function DoctorDashboard() {
   // Editing state
   const [editingMedicine, setEditingMedicine] = useState(null);
 
+  // Read-Only Clinic Stock State (Doctor views availability only; cannot edit/manage)
+  const [clinicStock, setClinicStock] = useState([]);
+  const [loadingStock, setLoadingStock] = useState(false);
+  const [stockSearch, setStockSearch] = useState('');
+
+  const fetchClinicStock = async () => {
+    if (!hasPermission('view_clinic_stock_readonly')) return;
+    setLoadingStock(true);
+    try {
+      const res = await axios.get(`${API_URL}/inventory`);
+      setClinicStock(Array.isArray(res.data?.items) ? res.data.items : []);
+    } catch (e) {
+      console.log('Clinic stock view note:', e.message);
+      setClinicStock([]);
+    } finally {
+      setLoadingStock(false);
+    }
+  };
+
+  const prefillMedicineFromStock = (invItem) => {
+    const form = invItem.form || 'Tablet';
+    const defaultDosages = DOSAGE_PRESETS[form] || DOSAGE_PRESETS['Tablet'];
+    const newEntry = {
+      medicine_name: `${invItem.medicine_name} ${invItem.strength ? '(' + invItem.strength + ')' : ''}`.trim(),
+      medicine_form: form,
+      dosage: defaultDosages[0],
+      frequency_preset: 'Once Daily',
+      schedule_type: 'daily',
+      meal_slots: ['Breakfast'],
+      food_instruction: 'After Food',
+      custom_times: ['08:00'],
+      duration_days: '7',
+      custom_schedule_text: '',
+      custom_duration_text: '',
+      availability_source: 'clinic_pharmacy',
+      suggestions: [],
+      showSuggestions: false,
+    };
+    setMedicinesList((prev) => {
+      if (prev.length === 1 && !prev[0].medicine_name.trim()) {
+        return [newEntry];
+      }
+      return [...prev, newEntry];
+    });
+    setTab('create');
+  };
+
   const fetchMyPatients = async () => {
     setLoadingPatients(true);
     try {
@@ -99,6 +146,7 @@ export default function DoctorDashboard() {
 
   useEffect(() => {
     fetchMyPatients();
+    if (tab === 'stock') fetchClinicStock();
   }, [tab]);
 
   const fetchPatientMedicines = async (pId) => {
@@ -613,6 +661,15 @@ export default function DoctorDashboard() {
           >
             <Text style={[styles.tabText, tab === 'patients' && styles.activeTabText]}>{t('My Patients')}</Text>
           </TouchableOpacity>
+
+          {hasPermission('view_clinic_stock_readonly') && (
+            <TouchableOpacity
+              style={[styles.tab, tab === 'stock' && styles.activeTab]}
+              onPress={() => { setTab('stock'); setSelectedPatient(null); setEditingMedicine(null); }}
+            >
+              <Text style={[styles.tabText, tab === 'stock' && styles.activeTabText]}>Clinic Stock</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </View>
 
@@ -926,6 +983,87 @@ export default function DoctorDashboard() {
                </TouchableOpacity>
             </View>
           </ScrollView>
+        ) : tab === 'stock' ? (
+          <View style={{ flex: 1 }}>
+            <View style={styles.inventoryHeaderCard}>
+              <Text style={styles.h3}>Clinic Pharmacy Stock (Read-Only)</Text>
+              <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2, marginBottom: 10 }}>
+                Managed by Pharmacy Manager. View live availability before prescribing.
+              </Text>
+              <TextInput
+                style={[styles.input, { marginBottom: 0, color: '#0F172A' }]}
+                placeholder="Search clinic medicines, brand, or strength..."
+                placeholderTextColor="#64748B"
+                value={stockSearch}
+                onChangeText={setStockSearch}
+              />
+            </View>
+
+            {loadingStock ? (
+              <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 24 }} />
+            ) : (
+              <FlatList
+                data={clinicStock.filter((item) => {
+                  const q = stockSearch.trim().toLowerCase();
+                  if (!q) return true;
+                  return (
+                    (item.medicine_name || '').toLowerCase().includes(q) ||
+                    (item.brand_name || '').toLowerCase().includes(q) ||
+                    (item.strength || '').toLowerCase().includes(q)
+                  );
+                })}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => {
+                  const avail = item.available_quantity ?? item.stock_quantity ?? 0;
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const isExpired = item.expiry_date && new Date(item.expiry_date) < today;
+                  const isOut = avail <= 0;
+                  const isLow = !isOut && item.stock_quantity <= (item.reorder_level ?? 10);
+                  const canPrescribe = !isExpired && avail > 0;
+
+                  return (
+                    <View style={[styles.inventoryCard, (isOut || isExpired) && styles.inventoryCardLow]}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View style={{ flex: 1, paddingRight: 10 }}>
+                          <Text style={styles.invName}>{item.medicine_name}</Text>
+                          <Text style={styles.invSub}>
+                            {item.brand_name ? `${item.brand_name} • ` : ''}{item.strength || ''} • {item.form}
+                          </Text>
+                          <Text style={styles.invDetails}>
+                            Available: {avail} {item.selling_price ? `• Price: ₹${item.selling_price}` : ''}
+                          </Text>
+                          {isExpired ? (
+                            <Text style={{ fontSize: 11, color: '#DC2626', fontWeight: '700', marginTop: 2 }}>
+                              Expired ({item.expiry_date.split('T')[0]})
+                            </Text>
+                          ) : isOut ? (
+                            <Text style={{ fontSize: 11, color: '#DC2626', fontWeight: '700', marginTop: 2 }}>
+                              Out of Stock
+                            </Text>
+                          ) : isLow ? (
+                            <Text style={{ fontSize: 11, color: '#B45309', fontWeight: '700', marginTop: 2 }}>
+                              Low Stock Warning
+                            </Text>
+                          ) : null}
+                        </View>
+
+                        {canPrescribe && (
+                          <TouchableOpacity
+                            style={styles.addStockBtn}
+                            onPress={() => prefillMedicineFromStock(item)}
+                          >
+                            <Text style={styles.addStockBtnText}>+ Prescribe</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  );
+                }}
+                ListEmptyComponent={<Text style={styles.emptyText}>No clinic stock items found.</Text>}
+              />
+            )}
+          </View>
         ) : editingMedicine ? (
            <ScrollView contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
              <View style={styles.formCard}>

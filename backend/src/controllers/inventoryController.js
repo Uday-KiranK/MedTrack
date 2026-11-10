@@ -5,7 +5,11 @@ exports.getInventory = async (req, res) => {
   try {
     const orgId = req.user.organization_id || 1;
     const items = await inventoryModel.getInventory(orgId);
-    res.json({ success: true, items });
+    // Strip procurement/cost fields for read-only clinical viewers (e.g. Doctors)
+    const sanitized = req.user.role === "pharmacy_manager"
+      ? items
+      : items.map(({ cost_price, supplier_name, ...clinicalFields }) => clinicalFields);
+    res.json({ success: true, items: sanitized, readOnly: req.user.role !== "pharmacy_manager" });
   } catch (error) {
     console.error("Get Inventory Error:", error);
     res.status(500).json({ success: false, message: "Server error loading inventory" });
