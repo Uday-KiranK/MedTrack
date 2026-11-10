@@ -3,6 +3,7 @@ const pool = require("../utils/db.js");
 const {
   createPrescription,
   addMedicine,
+  createPharmacyOrderForPrescription,
   getMedicinesForPatient,
   editMedicine,
   getDoctorPatientPrescriptions,
@@ -13,6 +14,7 @@ const { getMedicineInfo, precacheMedicineInfoAllLangs } = require("../services/m
 exports.createPrescription = async (req, res) => {
   try {
     const { patientId, medicines, startDateOption, customStartDate } = req.body;
+    const organizationId = req.user.organization_id || 1;
 
     if (!patientId || !Array.isArray(medicines)) {
       return res.status(400).json({ message: "Invalid data" });
@@ -25,8 +27,9 @@ exports.createPrescription = async (req, res) => {
       startDate = new Date(customStartDate);
     }
 
-    const prescription = await createPrescription(req.user.id, patientId, startDate);
+    const prescription = await createPrescription(req.user.id, patientId, startDate, organizationId);
 
+    const insertedMedicines = [];
     for (const med of medicines) {
       let dosageQty = 1;
       if (med.dosage) {
@@ -48,7 +51,7 @@ exports.createPrescription = async (req, res) => {
       // Total prescribed units = dosageQty * dosesPerDay * durationDays
       const totalUnitsPrescribed = dosageQty * dosesPerDay * durationDays;
 
-      await addMedicine({
+      const inserted = await addMedicine({
         prescription_id: prescription.id,
         medicine_name: med.medicine_name,
         dosage: med.dosage,
@@ -68,7 +71,17 @@ exports.createPrescription = async (req, res) => {
         custom_schedule_text: med.custom_schedule_text || null,
         custom_duration_text: med.custom_duration_text || null
       });
+      insertedMedicines.push(inserted);
     }
+
+    // Automatically forward clinic_pharmacy medicines to Pharmacy Manager queue & reserve stock
+    const pharmacyOrder = await createPharmacyOrderForPrescription({
+      organizationId,
+      prescriptionId: prescription.id,
+      doctorId: req.user.id,
+      patientId,
+      insertedMedicines,
+    });
 
     // Trigger background pre-caching across all languages
     setTimeout(async () => {
@@ -83,7 +96,11 @@ exports.createPrescription = async (req, res) => {
       }
     }, 100);
 
-    res.status(201).json({ message: "Prescription created" });
+    res.status(201).json({
+      message: "Prescription created",
+      prescriptionId: prescription.id,
+      pharmacyOrderId: pharmacyOrder ? pharmacyOrder.id : null,
+    });
   } catch (err) {
     console.error("Prescription error:", err);
     res.status(500).json({

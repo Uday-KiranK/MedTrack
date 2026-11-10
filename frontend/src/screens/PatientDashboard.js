@@ -1164,7 +1164,14 @@ export default function PatientDashboard() {
                           <Text style={styles.medName}>{item.medicine_name}</Text>
                           {isClinicPharmacy ? (
                             <View style={styles.clinicBadge}>
-                              <Text style={styles.clinicBadgeText}>✓ {t('Clinic Inventory Stock')}</Text>
+                              <Text style={styles.clinicBadgeText}>
+                                ✓ {t('Clinic Inventory Stock')}
+                                {item.pharmacy_order_status === 'dispensed'
+                                  ? ' • Dispensed ✓'
+                                  : item.pharmacy_order_status === 'pending'
+                                    ? ' • Pending Pickup'
+                                    : ''}
+                              </Text>
                             </View>
                           ) : (
                             <View style={styles.outsideBadge}>

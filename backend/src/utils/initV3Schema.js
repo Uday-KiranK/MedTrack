@@ -45,16 +45,101 @@ async function runInitV3Schema() {
       );
     }
 
-    // 3. Extend existing clinic tables with organization_id (prep for Phase 2 & 3)
+    // 3. Extend existing clinic tables with organization_id & pharmacy fields
     await pool.query(`ALTER TABLE clinic_inventory ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE;`);
     await pool.query(`UPDATE clinic_inventory SET organization_id = 1 WHERE organization_id IS NULL;`);
     await pool.query(`ALTER TABLE clinic_inventory ADD COLUMN IF NOT EXISTS reserved_quantity INTEGER NOT NULL DEFAULT 0;`);
+    await pool.query(`ALTER TABLE clinic_inventory ADD COLUMN IF NOT EXISTS supplier_name VARCHAR(255);`);
+    await pool.query(`ALTER TABLE clinic_inventory ADD COLUMN IF NOT EXISTS cost_price NUMERIC(10,2);`);
+    await pool.query(`ALTER TABLE clinic_inventory ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
 
     await pool.query(`ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE;`);
     await pool.query(`UPDATE prescriptions SET organization_id = 1 WHERE organization_id IS NULL;`);
 
     await pool.query(`ALTER TABLE doctor_patients ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE;`);
     await pool.query(`UPDATE doctor_patients SET organization_id = 1 WHERE organization_id IS NULL;`);
+
+    // 3b. Phase 2 Pharmacy Stock Movements, Dispense Queue & Invoices
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inventory_movements (
+        id SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        inventory_id INTEGER NOT NULL REFERENCES clinic_inventory(id) ON DELETE CASCADE,
+        movement_type VARCHAR(32) NOT NULL,
+        quantity_change INTEGER NOT NULL,
+        actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        reference_id INTEGER,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pharmacy_orders (
+        id SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        prescription_id INTEGER UNIQUE NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE,
+        patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        doctor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        status VARCHAR(32) NOT NULL DEFAULT 'pending',
+        dispensed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        dispensed_at TIMESTAMP,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pharmacy_order_items (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES pharmacy_orders(id) ON DELETE CASCADE,
+        medicine_id INTEGER NOT NULL REFERENCES medicines(id) ON DELETE CASCADE,
+        inventory_id INTEGER REFERENCES clinic_inventory(id) ON DELETE SET NULL,
+        medicine_name VARCHAR(255) NOT NULL,
+        medicine_form VARCHAR(64),
+        dosage VARCHAR(100),
+        prescribed_units INTEGER NOT NULL DEFAULT 1,
+        reserved_units INTEGER NOT NULL DEFAULT 0,
+        dispensed_units INTEGER NOT NULL DEFAULT 0,
+        unit_price NUMERIC(10,2) DEFAULT 0,
+        status VARCHAR(32) NOT NULL DEFAULT 'pending'
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        id SERIAL PRIMARY KEY,
+        invoice_number VARCHAR(64) UNIQUE NOT NULL,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        order_id INTEGER REFERENCES pharmacy_orders(id) ON DELETE SET NULL,
+        prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL,
+        patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        issued_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        subtotal NUMERIC(10,2) NOT NULL DEFAULT 0,
+        discount_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+        tax_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+        tax_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+        total_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+        payment_status VARCHAR(32) NOT NULL DEFAULT 'unpaid',
+        payment_method VARCHAR(32),
+        paid_at TIMESTAMP,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS invoice_items (
+        id SERIAL PRIMARY KEY,
+        invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+        inventory_id INTEGER REFERENCES clinic_inventory(id) ON DELETE SET NULL,
+        medicine_name VARCHAR(255) NOT NULL,
+        batch_number VARCHAR(100),
+        quantity INTEGER NOT NULL,
+        unit_price NUMERIC(10,2) NOT NULL DEFAULT 0,
+        line_total NUMERIC(10,2) NOT NULL DEFAULT 0
+      );
+    `);
 
     // 4. Audit logs table for Admin & compliance tracking
     await pool.query(`

@@ -12,6 +12,7 @@ import RegisterScreen from '../screens/RegisterScreen';
 import PatientDashboard from '../screens/PatientDashboard';
 import DoctorDashboard from '../screens/DoctorDashboard';
 import AdminDashboard from '../screens/AdminDashboard';
+import PharmacyDashboard from '../screens/PharmacyDashboard';
 
 const Stack = createNativeStackNavigator();
 
@@ -70,7 +71,9 @@ export default function AppNavigator() {
               <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
             ) : userInfo?.role === 'doctor' ? (
               <Stack.Screen name="DoctorDashboard" component={DoctorDashboard} />
-            ) : (userInfo?.role === 'pharmacy_manager' || userInfo?.role === 'receptionist') ? (
+            ) : userInfo?.role === 'pharmacy_manager' ? (
+              <Stack.Screen name="PharmacyDashboard" component={PharmacyDashboard} />
+            ) : userInfo?.role === 'receptionist' ? (
               <Stack.Screen name="StaffWorkspacePlaceholder" component={StaffWorkspacePlaceholder} />
             ) : (
               <Stack.Screen name="PatientDashboard" component={PatientDashboard} />

@@ -80,25 +80,6 @@ export default function DoctorDashboard() {
   // Editing state
   const [editingMedicine, setEditingMedicine] = useState(null);
 
-  // Pharmacy Inventory State
-  const [inventoryItems, setInventoryItems] = useState([]);
-  const [loadingInventory, setLoadingInventory] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [inventoryModalVisible, setInventoryModalVisible] = useState(false);
-  const [editingInventoryItem, setEditingInventoryItem] = useState(null);
-  
-  const [itemForm, setItemForm] = useState({
-    medicine_name: '',
-    brand_name: '',
-    strength: '',
-    form: 'Tablet',
-    stock_quantity: '',
-    batch_number: '',
-    expiry_date: '',
-    reorder_level: '10',
-    selling_price: ''
-  });
-
   const fetchMyPatients = async () => {
     setLoadingPatients(true);
     try {
@@ -116,23 +97,8 @@ export default function DoctorDashboard() {
     }
   };
 
-  const fetchInventory = async () => {
-    setLoadingInventory(true);
-    try {
-      const res = await axios.get(`${API_URL}/inventory`);
-      const data = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.items) ? res.data.items : []);
-      setInventoryItems(data);
-    } catch (e) {
-      console.log('Error fetching inventory', e);
-      setInventoryItems([]);
-    } finally {
-      setLoadingInventory(false);
-    }
-  };
-
   useEffect(() => {
     fetchMyPatients();
-    fetchInventory();
   }, [tab]);
 
   const fetchPatientMedicines = async (pId) => {
@@ -385,103 +351,11 @@ export default function DoctorDashboard() {
           showSuggestions: false
         }
       ]);
-      fetchInventory();
     } catch (e) {
       alert('Failed to prescribe: ' + (e.response?.data?.message || e.message));
     } finally {
       setCreating(false);
     }
-  };
-
-  const handleSaveInventoryItem = async () => {
-    if (!itemForm.medicine_name || !itemForm.stock_quantity) {
-      return alert('Please enter medicine name and stock quantity');
-    }
-
-    try {
-      const payload = {
-        medicineName: itemForm.medicine_name,
-        medicine_name: itemForm.medicine_name,
-        brandName: itemForm.brand_name,
-        brand_name: itemForm.brand_name,
-        strength: itemForm.strength,
-        form: itemForm.form,
-        stockQuantity: parseInt(itemForm.stock_quantity || '0', 10),
-        stock_quantity: parseInt(itemForm.stock_quantity || '0', 10),
-        batchNumber: itemForm.batch_number,
-        batch_number: itemForm.batch_number,
-        expiryDate: itemForm.expiry_date || null,
-        expiry_date: itemForm.expiry_date || null,
-        reorderLevel: parseInt(itemForm.reorder_level || '10', 10),
-        reorder_level: parseInt(itemForm.reorder_level || '10', 10),
-        sellingPrice: itemForm.selling_price ? parseFloat(itemForm.selling_price) : null,
-        selling_price: itemForm.selling_price ? parseFloat(itemForm.selling_price) : null
-      };
-
-      if (editingInventoryItem) {
-        await axios.put(`${API_URL}/inventory/${editingInventoryItem.id}`, payload);
-        alert('Stock item updated successfully!');
-      } else {
-        await axios.post(`${API_URL}/inventory`, payload);
-        alert('Item added to pharmacy inventory!');
-      }
-      setInventoryModalVisible(false);
-      setEditingInventoryItem(null);
-      resetItemForm();
-      fetchInventory();
-    } catch (e) {
-      alert('Failed to save item: ' + (e.response?.data?.message || e.message));
-    }
-  };
-
-  const handleRestock = async (item, amount = 10) => {
-    try {
-      await axios.put(`${API_URL}/inventory/${item.id}`, {
-        stock_quantity: item.stock_quantity + amount
-      });
-      fetchInventory();
-    } catch (e) {
-      alert('Failed to restock item');
-    }
-  };
-
-  const handleDeleteInventoryItem = async (id) => {
-    try {
-      await axios.delete(`${API_URL}/inventory/${id}`);
-      fetchInventory();
-    } catch (e) {
-      alert('Failed to delete item');
-    }
-  };
-
-  const resetItemForm = () => {
-    setItemForm({
-      medicine_name: '',
-      brand_name: '',
-      strength: '',
-      form: 'Tablet',
-      stock_quantity: '',
-      batch_number: '',
-      expiry_date: '',
-      reorder_level: '10',
-      selling_price: ''
-    });
-  };
-
-  const openEditInventoryModal = (item) => {
-    setEditingInventoryItem(item);
-    setItemForm({
-      medicine_name: item.medicine_name || '',
-      brand_name: item.brand_name || '',
-      strength: item.strength || '',
-      form: item.form || 'Tablet',
-      stock_quantity: item.stock_quantity ? item.stock_quantity.toString() : '0',
-      batch_number: item.batch_number || '',
-      expiry_date: item.expiry_date ? item.expiry_date.split('T')[0] : '',
-      reorder_level: item.reorder_level ? item.reorder_level.toString() : '10',
-      selling_price: item.selling_price ? item.selling_price.toString() : ''
-    });
-    setInventoryModalVisible(true);
   };
 
   const isMedicineCompleted = (item) => {
@@ -601,17 +475,24 @@ export default function DoctorDashboard() {
     });
   };
 
-  const handleEditNameChange = (val) => {
+  const handleEditNameChange = async (val) => {
     if (!editingMedicine) return;
-    const matches = inventory.filter(inv => 
-      inv.stock_quantity > 0 && inv.medicine_name.toLowerCase().includes(val.toLowerCase())
-    );
-    setEditingMedicine({
-      ...editingMedicine,
-      medicine_name: val,
-      showSuggestions: val.trim().length > 0 && matches.length > 0,
-      suggestions: matches
-    });
+    setEditingMedicine((prev) => prev ? ({ ...prev, medicine_name: val }) : null);
+    if (val.trim().length > 1) {
+      try {
+        const res = await axios.get(`${API_URL}/inventory/search?q=${encodeURIComponent(val)}`);
+        const matches = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.items) ? res.data.items : []);
+        setEditingMedicine((prev) => prev ? ({
+          ...prev,
+          showSuggestions: matches.length > 0,
+          suggestions: matches
+        }) : null);
+      } catch (e) {
+        setEditingMedicine((prev) => prev ? ({ ...prev, showSuggestions: false, suggestions: [] }) : null);
+      }
+    } else {
+      setEditingMedicine((prev) => prev ? ({ ...prev, showSuggestions: false, suggestions: [] }) : null);
+    }
   };
 
   const selectEditInventorySuggestion = (invItem) => {
@@ -691,18 +572,6 @@ export default function DoctorDashboard() {
     setPatientMedicines([]);
   };
 
-  const safeInventory = Array.isArray(inventoryItems) ? inventoryItems : [];
-  const safeSearchQuery = (searchQuery || '').toLowerCase();
-  
-  const filteredInventory = safeInventory.filter(item => {
-    if (!item) return false;
-    const nameMatch = item.medicine_name ? item.medicine_name.toLowerCase().includes(safeSearchQuery) : false;
-    const brandMatch = item.brand_name ? item.brand_name.toLowerCase().includes(safeSearchQuery) : false;
-    return nameMatch || brandMatch;
-  });
-
-  const lowStockCount = safeInventory.filter(i => i && (i.stock_quantity ?? 0) <= (i.reorder_level ?? 10)).length;
-
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -736,20 +605,6 @@ export default function DoctorDashboard() {
             onPress={() => {setTab('create'); setSelectedPatient(null); setEditingMedicine(null);}}
           >
             <Text style={[styles.tabText, tab === 'create' && styles.activeTabText]}>{t('New Prescription')}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.tab, tab === 'inventory' && styles.activeTab]}
-            onPress={() => {setTab('inventory'); setSelectedPatient(null);}}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={[styles.tabText, tab === 'inventory' && styles.activeTabText]}>{t('Pharmacy Stock')}</Text>
-              {lowStockCount > 0 && (
-                <View style={styles.tabBadge}>
-                  <Text style={styles.tabBadgeText}>{lowStockCount}</Text>
-                </View>
-              )}
-            </View>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -836,7 +691,9 @@ export default function DoctorDashboard() {
                      {med.showSuggestions && med.suggestions.length > 0 && (
                        <View style={styles.suggestionsDropdown}>
                          <Text style={styles.suggestionHeader}>Clinic Pharmacy Stock Items:</Text>
-                         {med.suggestions.map((invItem) => (
+                         {med.suggestions.map((invItem) => {
+                           const avail = invItem.available_quantity ?? invItem.stock_quantity ?? 0;
+                           return (
                            <TouchableOpacity 
                              key={invItem.id} 
                              style={styles.suggestionItem}
@@ -844,13 +701,14 @@ export default function DoctorDashboard() {
                            >
                              <View style={{ flex: 1 }}>
                                <Text style={styles.suggestionName}>{invItem.medicine_name} ({invItem.strength})</Text>
-                               <Text style={styles.suggestionSub}>{invItem.brand_name || invItem.form} • Qty: {invItem.stock_quantity}</Text>
+                               <Text style={styles.suggestionSub}>{invItem.brand_name || invItem.form} • Avail: {avail}</Text>
                              </View>
                              <View style={styles.inStockBadge}>
-                               <Text style={styles.inStockBadgeText}>In Stock – Clinic</Text>
+                               <Text style={styles.inStockBadgeText}>{avail > 0 ? 'In Stock – Clinic' : 'Out of Stock'}</Text>
                              </View>
                            </TouchableOpacity>
-                         ))}
+                           );
+                         })}
                        </View>
                      )}
 
@@ -1068,79 +926,6 @@ export default function DoctorDashboard() {
                </TouchableOpacity>
             </View>
           </ScrollView>
-        ) : tab === 'inventory' ? (
-          <View style={{ flex: 1 }}>
-            {/* Inventory Controls */}
-            <View style={styles.inventoryHeaderCard}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <Text style={styles.h3}>Clinic Pharmacy Stock</Text>
-                <TouchableOpacity 
-                  style={styles.addStockBtn} 
-                  onPress={() => { resetItemForm(); setEditingInventoryItem(null); setInventoryModalVisible(true); }}
-                >
-                  <Text style={styles.addStockBtnText}>+ Add Stock</Text>
-                </TouchableOpacity>
-              </View>
-
-              <TextInput
-                style={[styles.input, { marginBottom: 0, color: '#0F172A' }]}
-                placeholder="Search stock by name or brand..."
-                placeholderTextColor="#64748B"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-            </View>
-
-            {loadingInventory ? (
-              <ActivityIndicator size="large" color="#1A9988" style={{ marginTop: 20 }} />
-            ) : (
-              <FlatList
-                data={filteredInventory}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }) => {
-                  const isLow = item.stock_quantity <= item.reorder_level;
-                  return (
-                    <View style={[styles.inventoryCard, isLow && styles.inventoryCardLow]}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <Text style={styles.invName}>{item.medicine_name}</Text>
-                            {isLow && (
-                              <View style={styles.lowBadge}>
-                                <Text style={styles.lowBadgeText}>LOW STOCK</Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={styles.invSub}>{item.brand_name ? `${item.brand_name} • ` : ''}{item.strength} • {item.form}</Text>
-                          <Text style={styles.invDetails}>Batch: {item.batch_number || 'N/A'} • Exp: {item.expiry_date ? item.expiry_date.split('T')[0] : 'N/A'}</Text>
-                          {item.selling_price && <Text style={styles.invPrice}>Price: ₹{item.selling_price}</Text>}
-                        </View>
-
-                        <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                          <Text style={[styles.stockQty, isLow && { color: '#DC2626' }]}>
-                            {item.stock_quantity} <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>left</Text>
-                          </Text>
-
-                          <View style={{ flexDirection: 'row', gap: 6 }}>
-                            <TouchableOpacity style={styles.actionBtnSmall} onPress={() => handleRestock(item, 10)}>
-                              <Text style={styles.actionBtnText}>+10 Stock</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.actionBtnEdit} onPress={() => openEditInventoryModal(item)}>
-                              <Text style={styles.actionBtnEditText}>Edit</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.actionBtnDelete} onPress={() => handleDeleteInventoryItem(item.id)}>
-                              <Text style={styles.actionBtnDeleteText}>✕</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                }}
-                ListEmptyComponent={<Text style={styles.emptyText}>No inventory items added yet.</Text>}
-              />
-            )}
-          </View>
         ) : editingMedicine ? (
            <ScrollView contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
              <View style={styles.formCard}>
@@ -1165,7 +950,9 @@ export default function DoctorDashboard() {
                 {editingMedicine.showSuggestions && editingMedicine.suggestions && editingMedicine.suggestions.length > 0 && (
                   <View style={styles.suggestionsDropdown}>
                     <Text style={styles.suggestionHeader}>Clinic Pharmacy Stock Items:</Text>
-                    {editingMedicine.suggestions.map((invItem) => (
+                    {editingMedicine.suggestions.map((invItem) => {
+                      const avail = invItem.available_quantity ?? invItem.stock_quantity ?? 0;
+                      return (
                       <TouchableOpacity 
                         key={invItem.id} 
                         style={styles.suggestionItem}
@@ -1173,13 +960,14 @@ export default function DoctorDashboard() {
                       >
                         <View style={{ flex: 1 }}>
                           <Text style={styles.suggestionName}>{invItem.medicine_name} ({invItem.strength})</Text>
-                          <Text style={styles.suggestionSub}>{invItem.brand_name || invItem.form} • Qty: {invItem.stock_quantity}</Text>
+                          <Text style={styles.suggestionSub}>{invItem.brand_name || invItem.form} • Avail: {avail}</Text>
                         </View>
                         <View style={styles.inStockBadge}>
-                          <Text style={styles.inStockBadgeText}>In Stock – Clinic</Text>
+                          <Text style={styles.inStockBadgeText}>{avail > 0 ? 'In Stock – Clinic' : 'Out of Stock'}</Text>
                         </View>
                       </TouchableOpacity>
-                    ))}
+                      );
+                    })}
                   </View>
                 )}
 
@@ -1488,98 +1276,6 @@ export default function DoctorDashboard() {
         )}
       </View>
     </KeyboardAvoidingView>
-
-      {/* Add / Edit Inventory Modal */}
-      <Modal visible={inventoryModalVisible} transparent={true} animationType="fade" onRequestClose={() => setInventoryModalVisible(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setInventoryModalVisible(false)}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalCenterWrapper}>
-            <TouchableOpacity activeOpacity={1} style={styles.inventoryModalCard} onPress={() => {}}>
-              <View style={styles.modalHeaderRow}>
-                <View style={{ flex: 1, paddingRight: 8 }}>
-                  <Text style={styles.modalTitle}>{editingInventoryItem ? 'Edit Pharmacy Item' : 'Add Stock Item'}</Text>
-                  <Text style={styles.modalSubTitle}>Clinic Pharmacy Inventory</Text>
-                </View>
-                <TouchableOpacity onPress={() => setInventoryModalVisible(false)} style={styles.closeBtnIcon}>
-                  <Text style={styles.closeBtnText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView 
-                style={{ width: '100%' }} 
-                contentContainerStyle={{ paddingBottom: 28 }}
-                showsVerticalScrollIndicator={true} 
-                keyboardShouldPersistTaps="handled"
-                automaticallyAdjustKeyboardInsets={true}
-              >
-                <Text style={styles.label}>Medicine Name *</Text>
-                <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="e.g. Amoxicillin" placeholderTextColor="#64748B" value={itemForm.medicine_name} onChangeText={(val) => setItemForm({ ...itemForm, medicine_name: val })} />
-
-                <View style={styles.row}>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>Brand Name</Text>
-                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="e.g. Cipla / Sun" placeholderTextColor="#64748B" value={itemForm.brand_name} onChangeText={(val) => setItemForm({ ...itemForm, brand_name: val })} />
-                  </View>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>Strength</Text>
-                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="e.g. 500mg" placeholderTextColor="#64748B" value={itemForm.strength} onChangeText={(val) => setItemForm({ ...itemForm, strength: val })} />
-                  </View>
-                </View>
-
-                <View style={styles.row}>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>Form</Text>
-                    <View style={styles.pickerContainer}>
-                      <Picker 
-                        selectedValue={itemForm.form} 
-                        onValueChange={(val) => setItemForm({ ...itemForm, form: val })}
-                        style={styles.pickerStyle}
-                        dropdownIconColor="#0F172A"
-                      >
-                        <Picker.Item label="Tablet" value="Tablet" color="#0F172A" style={styles.pickerItemStyle} />
-                        <Picker.Item label="Capsule" value="Capsule" color="#0F172A" style={styles.pickerItemStyle} />
-                        <Picker.Item label="Syrup" value="Syrup" color="#0F172A" style={styles.pickerItemStyle} />
-                        <Picker.Item label="Injection" value="Injection" color="#0F172A" style={styles.pickerItemStyle} />
-                        <Picker.Item label="Ointment" value="Ointment" color="#0F172A" style={styles.pickerItemStyle} />
-                        <Picker.Item label="Drops" value="Drops" color="#0F172A" style={styles.pickerItemStyle} />
-                      </Picker>
-                    </View>
-                  </View>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>Stock Qty *</Text>
-                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="e.g. 100" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.stock_quantity} onChangeText={(val) => setItemForm({ ...itemForm, stock_quantity: val })} />
-                  </View>
-                </View>
-
-                <View style={styles.row}>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>Batch Number</Text>
-                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="e.g. B-9982" placeholderTextColor="#64748B" value={itemForm.batch_number} onChangeText={(val) => setItemForm({ ...itemForm, batch_number: val })} />
-                  </View>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>Expiry (YYYY-MM-DD)</Text>
-                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="2027-12-31" placeholderTextColor="#64748B" value={itemForm.expiry_date} onChangeText={(val) => setItemForm({ ...itemForm, expiry_date: val })} />
-                  </View>
-                </View>
-
-                <View style={styles.row}>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>Reorder Level</Text>
-                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="10" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.reorder_level} onChangeText={(val) => setItemForm({ ...itemForm, reorder_level: val })} />
-                  </View>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>Selling Price (₹)</Text>
-                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="45.00" placeholderTextColor="#64748B" keyboardType="numeric" value={itemForm.selling_price} onChangeText={(val) => setItemForm({ ...itemForm, selling_price: val })} />
-                  </View>
-                </View>
-
-                <TouchableOpacity style={styles.saveStockBtn} onPress={handleSaveInventoryItem}>
-                  <Text style={styles.saveStockBtnText}>Save Stock Item</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </TouchableOpacity>
-          </KeyboardAvoidingView>
-        </TouchableOpacity>
-      </Modal>
 
       {/* Full Streak Calendar Modal */}
       <Modal visible={!!showCalendarMed} transparent={true} animationType="slide">
