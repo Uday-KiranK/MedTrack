@@ -165,7 +165,17 @@ const resources = {
       "Ointment": "Ointment",
       "Drops": "Drops",
       "Active": "Active",
-      "Completed": "Completed"
+      "Completed": "Completed",
+      "Clinic Visits": "Clinic Visits",
+      "Appointments": "Appointments",
+      "CheckUp History": "CheckUp History",
+      "Pharmacy Invoices": "Pharmacy Invoices",
+      "Diagnosis": "Diagnosis",
+      "Follow-Up": "Follow-Up",
+      "Paid": "Paid",
+      "Unpaid": "Unpaid",
+      "Pending Pickup": "Pending Pickup",
+      "Dispensed": "Dispensed"
     }
   },
   hi: {
@@ -330,7 +340,17 @@ const resources = {
       "Ointment": "मलहम",
       "Drops": "ड्रॉप्स",
       "Active": "सक्रिय",
-      "Completed": "पूर्ण"
+      "Completed": "पूर्ण",
+      "Clinic Visits": "क्लिनिक विजिट",
+      "Appointments": "अपॉइंटमेंट",
+      "CheckUp History": "चेकअप इतिहास",
+      "Pharmacy Invoices": "फार्मेसी बिल",
+      "Diagnosis": "निदान",
+      "Follow-Up": "फ़ॉलो-अप",
+      "Paid": "भुगतान हो गया",
+      "Unpaid": "बकाया",
+      "Pending Pickup": "पिकअप बाकी",
+      "Dispensed": "दिया गया"
     }
   },
   ta: {
@@ -495,7 +515,17 @@ const resources = {
       "Ointment": "களிம்பு",
       "Drops": "சொட்டுகள்",
       "Active": "செயலில்",
-      "Completed": "முடிந்தது"
+      "Completed": "முடிந்தது",
+      "Clinic Visits": "கிளினிக் வருகைகள்",
+      "Appointments": "நேர ஒதுக்கீடுகள்",
+      "CheckUp History": "பரிசோதனை வரலாறு",
+      "Pharmacy Invoices": "மருந்தக பில்கள்",
+      "Diagnosis": "நோய் கண்டறிதல்",
+      "Follow-Up": "தொடர் சந்திப்பு",
+      "Paid": "செலுத்தப்பட்டது",
+      "Unpaid": "செலுத்தப்படாதது",
+      "Pending Pickup": "பெறவேண்டியது",
+      "Dispensed": "வழங்கப்பட்டது"
     }
   },
   te: {
@@ -660,7 +690,17 @@ const resources = {
       "Ointment": "మలం",
       "Drops": "చుక్కలు",
       "Active": "యాక్టివ్",
-      "Completed": "పూర్తయింది"
+      "Completed": "పూర్తయింది",
+      "Clinic Visits": "క్లినిక్ సందర్శనలు",
+      "Appointments": "అపాయింట్‌మెంట్లు",
+      "CheckUp History": "చెకప్ చరిత్ర",
+      "Pharmacy Invoices": "ఫార్మసీ బిల్లులు",
+      "Diagnosis": "రోగ నిర్ధారణ",
+      "Follow-Up": "ఫాలో-అప్",
+      "Paid": "చెల్లించబడింది",
+      "Unpaid": "చెల్లించని",
+      "Pending Pickup": "పికప్ పెండింగ్",
+      "Dispensed": "అందజేయబడింది"
     }
   },
   kn: {
@@ -825,7 +865,17 @@ const resources = {
       "Ointment": "ಮುಲಾಮು",
       "Drops": "ಹನಿಗಳು",
       "Active": "ಸಕ್ರಿಯ",
-      "Completed": "ಪೂರ್ಣಗೊಂಡಿದೆ"
+      "Completed": "ಪೂರ್ಣಗೊಂಡಿದೆ",
+      "Clinic Visits": "ಕ್ಲಿನಿಕ್ ಭೇಟಿಗಳು",
+      "Appointments": "ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್‌ಗಳು",
+      "CheckUp History": "ತಪಾಸಣೆ ಇತಿಹಾಸ",
+      "Pharmacy Invoices": "ಫಾರ್ಮಸಿ ಬಿಲ್‌ಗಳು",
+      "Diagnosis": "ರೋಗನಿರ್ಣಯ",
+      "Follow-Up": "ಫಾಲೋ-ಅಪ್",
+      "Paid": "ಪಾವತಿಸಲಾಗಿದೆ",
+      "Unpaid": "ಪಾವತಿಸಿಲ್ಲ",
+      "Pending Pickup": "ಪಿಕಪ್ ಬಾಕಿ",
+      "Dispensed": "ವಿತರಿಸಲಾಗಿದೆ"
     }
   }
 };

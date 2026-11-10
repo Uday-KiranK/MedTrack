@@ -193,6 +193,26 @@ async function runInitV3Schema() {
       );
     `);
 
+    // 3d. Phase 4 Shared CheckUp History (Consultations, Vitals, Diagnosis, Follow-Ups)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS checkups (
+        id SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        appointment_id INTEGER REFERENCES appointments(id) ON DELETE SET NULL,
+        doctor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL,
+        visit_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        vitals JSONB DEFAULT '{}'::jsonb,
+        chief_complaint TEXT,
+        diagnosis TEXT,
+        clinical_notes TEXT,
+        follow_up_date DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // 4. Audit logs table for Admin & compliance tracking
     await pool.query(`
       CREATE TABLE IF NOT EXISTS audit_logs (

@@ -772,7 +772,7 @@ exports.getPatientHistory = async (req, res) => {
       return res.status(404).json({ success: false, message: "Patient not found in your clinic" });
     }
 
-    const [apptsRes, mappingsRes, rxRes] = await Promise.all([
+    const [apptsRes, mappingsRes, rxRes, checkupsRes] = await Promise.all([
       pool.query(
         `SELECT a.*, doc.name AS doctor_name, doc.specialization
          FROM appointments a
@@ -800,6 +800,14 @@ exports.getPatientHistory = async (req, res) => {
          ORDER BY p.created_at DESC`,
         [patientId, orgId]
       ),
+      pool.query(
+        `SELECT c.*, doc.name AS doctor_name, doc.specialization
+         FROM checkups c
+         JOIN users doc ON c.doctor_id = doc.id
+         WHERE c.patient_id = $1 AND c.organization_id = $2
+         ORDER BY c.visit_date DESC, c.created_at DESC`,
+        [patientId, orgId]
+      ),
     ]);
 
     res.json({
@@ -808,9 +816,11 @@ exports.getPatientHistory = async (req, res) => {
       appointments: apptsRes.rows,
       mappings: mappingsRes.rows,
       prescriptions: rxRes.rows,
+      checkups: checkupsRes.rows,
     });
   } catch (error) {
     console.error("Reception Patient History Error:", error);
     res.status(500).json({ success: false, message: "Server error loading patient history" });
   }
 };
+

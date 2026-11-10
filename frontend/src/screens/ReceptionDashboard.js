@@ -1227,7 +1227,35 @@ export default function ReceptionDashboard() {
               <ActivityIndicator size="large" color={COLORS.primary} style={{ marginVertical: 30 }} />
             ) : (
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-                <Text style={styles.sectionTitle}>Appointments ({historyModalData?.appointments?.length || 0})</Text>
+                <Text style={styles.sectionTitle}>CheckUp History ({historyModalData?.checkups?.length || 0})</Text>
+                {(historyModalData?.checkups || []).length === 0 ? (
+                  <Text style={styles.cardMeta}>No clinical checkups recorded yet.</Text>
+                ) : (
+                  historyModalData.checkups.map((chk) => {
+                    const v = chk.vitals || {};
+                    return (
+                      <View key={chk.id} style={[styles.historyBlock, { backgroundColor: '#F0FDFA', borderColor: '#99F6E4' }]}>
+                        <Text style={[styles.orderMedName, { color: '#0F766E' }]}>
+                          {chk.visit_date?.split('T')[0]} • Dr. {chk.doctor_name} — {chk.diagnosis || 'Consultation'}
+                        </Text>
+                        {chk.chief_complaint ? <Text style={styles.cardMeta}>Complaint: {chk.chief_complaint}</Text> : null}
+                        {(v.bp || v.temp || v.pulse || v.weight || v.spo2) && (
+                          <Text style={[styles.cardMeta, { color: '#115E59', fontWeight: '600' }]}>
+                            Vitals: {v.bp ? `BP ${v.bp} ` : ''}{v.temp ? `• Temp ${v.temp} ` : ''}{v.pulse ? `• Pulse ${v.pulse} ` : ''}{v.spo2 ? `• SpO2 ${v.spo2}` : ''}
+                          </Text>
+                        )}
+                        {chk.clinical_notes ? <Text style={styles.cardMeta}>Notes: {chk.clinical_notes}</Text> : null}
+                        {chk.follow_up_date ? (
+                          <Text style={{ fontSize: 11, color: '#B45309', fontWeight: '700', marginTop: 2 }}>
+                            Follow-Up Due: {chk.follow_up_date.split('T')[0]}
+                          </Text>
+                        ) : null}
+                      </View>
+                    );
+                  })
+                )}
+
+                <Text style={[styles.sectionTitle, { marginTop: 14 }]}>Appointments ({historyModalData?.appointments?.length || 0})</Text>
                 {(historyModalData?.appointments || []).length === 0 ? (
                   <Text style={styles.cardMeta}>No past appointments.</Text>
                 ) : (
@@ -1436,3 +1464,4 @@ const styles = StyleSheet.create({
   primaryBtn: { backgroundColor: COLORS.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   primaryBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
 });
+

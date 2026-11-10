@@ -28,3 +28,4 @@ router.post("/appointments", authorizePermission("manage_appointments"), recepti
 router.patch("/appointments/:id", authorizePermission("manage_appointments"), receptionController.updateAppointment);
 
 module.exports = router;
+

@@ -194,9 +194,99 @@ export default function DoctorDashboard() {
     }
   };
 
+  // CheckUp History & Recording Modal State
+  const [patientCheckups, setPatientCheckups] = useState([]);
+  const [checkupModalVisible, setCheckupModalVisible] = useState(false);
+  const [savingCheckup, setSavingCheckup] = useState(false);
+  const [checkupForm, setCheckupForm] = useState({
+    patientId: '',
+    patientName: '',
+    appointmentId: null,
+    chiefComplaint: '',
+    diagnosis: '',
+    clinicalNotes: '',
+    followUpDate: '',
+    bp: '',
+    temp: '',
+    pulse: '',
+    weight: '',
+    spo2: '',
+    completeAppointment: true,
+  });
+
+  const fetchPatientCheckups = async (pId) => {
+    if (!hasPermission('view_checkups')) return;
+    try {
+      const res = await axios.get(`${API_URL}/checkups/patient/${pId}`);
+      if (res.data?.success) setPatientCheckups(res.data.checkups || []);
+    } catch (e) {
+      console.log('Fetch patient checkups note:', e.message);
+      setPatientCheckups([]);
+    }
+  };
+
+  const openRecordCheckupModal = ({ patientId: pId, patientName = '', appointmentId = null, reason = '', vitals = {} }) => {
+    const v = vitals || {};
+    setCheckupForm({
+      patientId: String(pId),
+      patientName,
+      appointmentId,
+      chiefComplaint: reason || '',
+      diagnosis: '',
+      clinicalNotes: '',
+      followUpDate: '',
+      bp: v.bp || '',
+      temp: v.temp || '',
+      pulse: v.pulse || '',
+      weight: v.weight || '',
+      spo2: v.spo2 || '',
+      completeAppointment: !!appointmentId,
+    });
+    setCheckupModalVisible(true);
+  };
+
+  const handleSaveCheckup = async () => {
+    if (!checkupForm.diagnosis.trim() && !checkupForm.chiefComplaint.trim()) {
+      return alert('Enter at least a Chief Complaint or Diagnosis.');
+    }
+    setSavingCheckup(true);
+    try {
+      const vitals = {};
+      if (checkupForm.bp) vitals.bp = checkupForm.bp;
+      if (checkupForm.temp) vitals.temp = checkupForm.temp;
+      if (checkupForm.pulse) vitals.pulse = checkupForm.pulse;
+      if (checkupForm.weight) vitals.weight = checkupForm.weight;
+      if (checkupForm.spo2) vitals.spo2 = checkupForm.spo2;
+
+      await axios.post(`${API_URL}/checkups`, {
+        patientId: parseInt(checkupForm.patientId, 10),
+        appointmentId: checkupForm.appointmentId || null,
+        chiefComplaint: checkupForm.chiefComplaint.trim(),
+        diagnosis: checkupForm.diagnosis.trim(),
+        clinicalNotes: checkupForm.clinicalNotes.trim(),
+        followUpDate: checkupForm.followUpDate.trim() || null,
+        vitals,
+        completeAppointment: checkupForm.completeAppointment,
+      });
+      alert('CheckUp record saved!');
+      setCheckupModalVisible(false);
+      if (selectedPatient && String(selectedPatient.id) === String(checkupForm.patientId)) {
+        fetchPatientCheckups(selectedPatient.id);
+      }
+      if (tab === 'appointments') {
+        fetchDoctorAppointmentsAndSchedule();
+      }
+    } catch (e) {
+      alert(e.response?.data?.message || 'Failed to save CheckUp');
+    } finally {
+      setSavingCheckup(false);
+    }
+  };
+
   const handlePatientClick = (patient) => {
     setSelectedPatient(patient);
     fetchPatientMedicines(patient.id);
+    fetchPatientCheckups(patient.id);
   };
 
   const handleAddPatient = async () => {
@@ -1171,6 +1261,22 @@ export default function DoctorDashboard() {
                         >
                           <Text style={styles.actionBtnEditText}>+ Prescribe</Text>
                         </TouchableOpacity>
+                        {hasPermission('create_checkups') && (
+                          <TouchableOpacity
+                            style={styles.actionBtnSmall}
+                            onPress={() =>
+                              openRecordCheckupModal({
+                                patientId: item.patient_id,
+                                patientName: item.patient_name,
+                                appointmentId: item.id,
+                                reason: item.reason,
+                                vitals: item.vitals,
+                              })
+                            }
+                          >
+                            <Text style={styles.actionBtnText}>🩺 CheckUp</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     </View>
                   );
@@ -1425,10 +1531,20 @@ export default function DoctorDashboard() {
            </ScrollView>
         ) : selectedPatient ? (
            <View style={{ flex: 1 }}>
-              <TouchableOpacity style={{ marginBottom: 16 }} onPress={handleBackToPatients}>
-                 <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>← {t('Back to Patients')}</Text>
-              </TouchableOpacity>
-              <Text style={styles.h3}>{t('Medicines for ')}{selectedPatient.name}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <TouchableOpacity onPress={handleBackToPatients}>
+                   <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>← {t('Back to Patients')}</Text>
+                </TouchableOpacity>
+                {hasPermission('create_checkups') && (
+                  <TouchableOpacity
+                    style={styles.addStockBtn}
+                    onPress={() => openRecordCheckupModal({ patientId: selectedPatient.id, patientName: selectedPatient.name })}
+                  >
+                    <Text style={styles.addStockBtnText}>🩺 + Record CheckUp</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <Text style={styles.h3}>{selectedPatient.name}</Text>
               
               {loadingPatientMeds ? (
                 <ActivityIndicator size="large" color="#1A9988" style={{ marginTop: 20 }} />
@@ -1436,6 +1552,44 @@ export default function DoctorDashboard() {
                 <FlatList
                   data={patientMedicines}
                   keyExtractor={(item) => item.id.toString()}
+                  ListHeaderComponent={
+                    <View style={{ marginTop: 10, marginBottom: 14 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: '#0F172A', marginBottom: 8 }}>
+                        🩺 CheckUp History ({patientCheckups.length})
+                      </Text>
+                      {patientCheckups.length === 0 ? (
+                        <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 10 }}>
+                          No checkup notes recorded yet for this patient.
+                        </Text>
+                      ) : (
+                        patientCheckups.map((chk) => {
+                          const v = chk.vitals || {};
+                          return (
+                            <View key={chk.id} style={[styles.inventoryCard, { backgroundColor: '#F0FDFA', borderColor: '#99F6E4' }]}>
+                              <Text style={{ fontSize: 13, fontWeight: '800', color: '#0F766E' }}>
+                                {chk.visit_date?.split('T')[0]} • {chk.diagnosis || 'Consultation'}
+                              </Text>
+                              {chk.chief_complaint ? <Text style={styles.invDetails}>Complaint: {chk.chief_complaint}</Text> : null}
+                              {(v.bp || v.temp || v.pulse || v.weight || v.spo2) && (
+                                <Text style={{ fontSize: 11, color: '#115E59', fontWeight: '600', marginTop: 2 }}>
+                                  Vitals: {v.bp ? `BP ${v.bp} ` : ''}{v.temp ? `• Temp ${v.temp} ` : ''}{v.pulse ? `• Pulse ${v.pulse} ` : ''}{v.weight ? `• Wt ${v.weight} ` : ''}{v.spo2 ? `• SpO2 ${v.spo2}` : ''}
+                                </Text>
+                              )}
+                              {chk.clinical_notes ? <Text style={styles.invDetails}>Notes: {chk.clinical_notes}</Text> : null}
+                              {chk.follow_up_date ? (
+                                <Text style={{ fontSize: 11, color: '#B45309', fontWeight: '700', marginTop: 3 }}>
+                                  Follow-Up: {chk.follow_up_date.split('T')[0]}
+                                </Text>
+                              ) : null}
+                            </View>
+                          );
+                        })
+                      )}
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: '#0F172A', marginTop: 8 }}>
+                        💊 {t('Medicines for ')}{selectedPatient.name}
+                      </Text>
+                    </View>
+                  }
                   renderItem={({item}) => {
                      const completed = isMedicineCompleted(item);
                      return (
@@ -1618,6 +1772,89 @@ export default function DoctorDashboard() {
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* Record CheckUp Modal */}
+      <Modal visible={checkupModalVisible} transparent animationType="slide" onRequestClose={() => setCheckupModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCheckupModalVisible(false)}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalCenterWrapper}>
+            <TouchableOpacity activeOpacity={1} style={styles.inventoryModalCard} onPress={() => {}}>
+              <View style={styles.modalHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalTitle}>Record Patient CheckUp</Text>
+                  <Text style={styles.modalSubTitle}>{checkupForm.patientName || `Patient #${checkupForm.patientId}`}</Text>
+                </View>
+                <TouchableOpacity onPress={() => setCheckupModalVisible(false)} style={styles.closeBtnIcon}>
+                  <Text style={styles.closeBtnText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ width: '100%' }} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+                <Text style={styles.label}>Chief Complaint</Text>
+                <TextInput
+                  style={[styles.input, { color: '#0F172A' }]}
+                  placeholder="e.g. Fever & sore throat"
+                  placeholderTextColor="#64748B"
+                  value={checkupForm.chiefComplaint}
+                  onChangeText={(v) => setCheckupForm((p) => ({ ...p, chiefComplaint: v }))}
+                />
+
+                <Text style={styles.label}>Diagnosis *</Text>
+                <TextInput
+                  style={[styles.input, { color: '#0F172A' }]}
+                  placeholder="e.g. Acute Viral Pharyngitis"
+                  placeholderTextColor="#64748B"
+                  value={checkupForm.diagnosis}
+                  onChangeText={(v) => setCheckupForm((p) => ({ ...p, diagnosis: v }))}
+                />
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>BP</Text>
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="120/80" value={checkupForm.bp} onChangeText={(v) => setCheckupForm((p) => ({ ...p, bp: v }))} />
+                  </View>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Temp</Text>
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="98.6 F" value={checkupForm.temp} onChangeText={(v) => setCheckupForm((p) => ({ ...p, temp: v }))} />
+                  </View>
+                </View>
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Pulse</Text>
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="78 bpm" value={checkupForm.pulse} onChangeText={(v) => setCheckupForm((p) => ({ ...p, pulse: v }))} />
+                  </View>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>SpO2 / Weight</Text>
+                    <TextInput style={[styles.input, { color: '#0F172A' }]} placeholder="98% / 68kg" value={checkupForm.spo2} onChangeText={(v) => setCheckupForm((p) => ({ ...p, spo2: v }))} />
+                  </View>
+                </View>
+
+                <Text style={styles.label}>Clinical Notes</Text>
+                <TextInput
+                  style={[styles.input, { height: 74, textAlignVertical: 'top', paddingTop: 10, color: '#0F172A' }]}
+                  multiline
+                  placeholder="Observations, rest & diet guidance..."
+                  placeholderTextColor="#64748B"
+                  value={checkupForm.clinicalNotes}
+                  onChangeText={(v) => setCheckupForm((p) => ({ ...p, clinicalNotes: v }))}
+                />
+
+                <Text style={styles.label}>Follow-Up Date (YYYY-MM-DD, Optional)</Text>
+                <TextInput
+                  style={[styles.input, { color: '#0F172A' }]}
+                  placeholder="2026-11-17"
+                  placeholderTextColor="#64748B"
+                  value={checkupForm.followUpDate}
+                  onChangeText={(v) => setCheckupForm((p) => ({ ...p, followUpDate: v }))}
+                />
+
+                <TouchableOpacity style={styles.saveStockBtn} onPress={handleSaveCheckup} disabled={savingCheckup}>
+                  {savingCheckup ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveStockBtnText}>Save CheckUp Record</Text>}
+                </TouchableOpacity>
+              </ScrollView>
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </TouchableOpacity>
       </Modal>
 
       {/* Language Selector Modal */}

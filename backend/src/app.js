@@ -10,6 +10,8 @@ const inventoryRoutes = require("./routes/inventoryRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const pharmacyRoutes = require("./routes/pharmacyRoutes");
 const receptionRoutes = require("./routes/receptionRoutes");
+const checkupRoutes = require("./routes/checkupRoutes");
+const patientRoutes = require("./routes/patientRoutes");
 
 const app = express();
 
@@ -23,6 +25,8 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/pharmacy", pharmacyRoutes);
 app.use("/api/reception", receptionRoutes);
+app.use("/api/checkups", checkupRoutes);
+app.use("/api/patient", patientRoutes);
 
 app.get("/", (req, res) => {
   res.send("MedTrack Backend Running");

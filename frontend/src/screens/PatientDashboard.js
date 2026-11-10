@@ -69,6 +69,30 @@ export default function PatientDashboard() {
   const [uploadingLab, setUploadingLab] = useState(false);
   const [labSummary, setLabSummary] = useState(null);
 
+  // V3 Clinic Visits, CheckUp History & Invoices state
+  const [myAppointments, setMyAppointments] = useState([]);
+  const [myCheckups, setMyCheckups] = useState([]);
+  const [myInvoices, setMyInvoices] = useState([]);
+  const [loadingVisits, setLoadingVisits] = useState(false);
+
+  const fetchClinicVisitsData = async () => {
+    setLoadingVisits(true);
+    try {
+      const [apptRes, chkRes, invRes] = await Promise.all([
+        axios.get(`${API_URL}/patient/appointments`).catch(() => ({ data: { appointments: [] } })),
+        axios.get(`${API_URL}/checkups/my`).catch(() => ({ data: { checkups: [] } })),
+        axios.get(`${API_URL}/pharmacy/my-invoices`).catch(() => ({ data: { invoices: [] } })),
+      ]);
+      setMyAppointments(apptRes.data?.appointments || []);
+      setMyCheckups(chkRes.data?.checkups || []);
+      setMyInvoices(invRes.data?.invoices || []);
+    } catch (e) {
+      console.log('Clinic visits fetch note:', e.message);
+    } finally {
+      setLoadingVisits(false);
+    }
+  };
+
   // Audio & Alarm state
   const soundRef = useRef(null);
   const [activeAlarms, setActiveAlarms] = useState([]);
@@ -1082,32 +1106,44 @@ export default function PatientDashboard() {
       </View>
 
       {/* Tabs */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, tab === 'prescriptions' && styles.activeTab]}
-          onPress={() => setTab('prescriptions')}
-        >
-          <Text style={[styles.tabText, tab === 'prescriptions' && styles.activeTabText]}>{t('My Medications')}</Text>
-        </TouchableOpacity>
+      <View style={{ backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContainer}>
+          <TouchableOpacity 
+            style={[styles.tab, tab === 'prescriptions' && styles.activeTab]}
+            onPress={() => setTab('prescriptions')}
+          >
+            <Text style={[styles.tabText, tab === 'prescriptions' && styles.activeTabText]}>{t('My Medications')}</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.tab, tab === 'medicine_info' && styles.activeTab]}
-          onPress={() => {
-            setTab('medicine_info');
-            if (!activeTabMed && medicines.length > 0) {
-              handleSelectTabMedicine(medicines[0]);
-            }
-          }}
-        >
-          <Text style={[styles.tabText, tab === 'medicine_info' && styles.activeTabText]}>{t('Medicine Info')}</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, tab === 'labs' && styles.activeTab]}
-          onPress={() => setTab('labs')}
-        >
-          <Text style={[styles.tabText, tab === 'labs' && styles.activeTabText]}>{t('AI Lab Analyzer')}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, tab === 'medicine_info' && styles.activeTab]}
+            onPress={() => {
+              setTab('medicine_info');
+              if (!activeTabMed && medicines.length > 0) {
+                handleSelectTabMedicine(medicines[0]);
+              }
+            }}
+          >
+            <Text style={[styles.tabText, tab === 'medicine_info' && styles.activeTabText]}>{t('Medicine Info')}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.tab, tab === 'visits' && styles.activeTab]}
+            onPress={() => {
+              setTab('visits');
+              fetchClinicVisitsData();
+            }}
+          >
+            <Text style={[styles.tabText, tab === 'visits' && styles.activeTabText]}>🏥 {t('Clinic Visits')}</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.tab, tab === 'labs' && styles.activeTab]}
+            onPress={() => setTab('labs')}
+          >
+            <Text style={[styles.tabText, tab === 'labs' && styles.activeTabText]}>{t('AI Lab Analyzer')}</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       {/* Tab Content */}
@@ -1167,9 +1203,9 @@ export default function PatientDashboard() {
                               <Text style={styles.clinicBadgeText}>
                                 ✓ {t('Clinic Inventory Stock')}
                                 {item.pharmacy_order_status === 'dispensed'
-                                  ? ' • Dispensed ✓'
+                                  ? ` • ${t('Dispensed')} ✓`
                                   : item.pharmacy_order_status === 'pending'
-                                    ? ' • Pending Pickup'
+                                    ? ` • ${t('Pending Pickup')}`
                                     : ''}
                               </Text>
                             </View>
@@ -1404,6 +1440,92 @@ export default function PatientDashboard() {
                   {t('Select a medicine above or search to view complete details')}
                 </Text>
               </View>
+            )}
+          </ScrollView>
+        ) : tab === 'visits' ? (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+            {loadingVisits ? (
+              <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
+            ) : (
+              <>
+                <Text style={styles.sectionHeader}>📅 {t('Appointments')} ({myAppointments.length})</Text>
+                {myAppointments.length === 0 ? (
+                  <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 16 }}>No clinic appointments yet.</Text>
+                ) : (
+                  myAppointments.map((a) => (
+                    <View key={a.id} style={styles.card}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={styles.medName}>Dr. {a.doctor_name}</Text>
+                        <View style={styles.activeBadge}>
+                          <Text style={styles.activeBadgeText}>{a.status?.replace('_', ' ').toUpperCase()}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.medDetail}>
+                        {a.appointment_date?.split('T')[0]} at {a.slot_time} {a.specialization ? `• ${a.specialization}` : ''}
+                      </Text>
+                      {a.reason ? <Text style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>{a.reason}</Text> : null}
+                    </View>
+                  ))
+                )}
+
+                <Text style={[styles.sectionHeader, { marginTop: 12 }]}>🩺 {t('CheckUp History')} ({myCheckups.length})</Text>
+                {myCheckups.length === 0 ? (
+                  <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 16 }}>No checkup summaries recorded yet.</Text>
+                ) : (
+                  myCheckups.map((chk) => {
+                    const v = chk.vitals || {};
+                    return (
+                      <View key={chk.id} style={styles.card}>
+                        <Text style={styles.medName}>
+                          {chk.visit_date?.split('T')[0]} • Dr. {chk.doctor_name}
+                        </Text>
+                        {chk.diagnosis ? (
+                          <Text style={[styles.medDetail, { color: COLORS.primary, fontWeight: '700' }]}>
+                            {t('Diagnosis')}: {chk.diagnosis}
+                          </Text>
+                        ) : null}
+                        {(v.bp || v.temp || v.pulse || v.spo2) && (
+                          <Text style={{ fontSize: 12, color: '#0F766E', marginTop: 3 }}>
+                            {v.bp ? `BP ${v.bp} ` : ''}{v.temp ? `• Temp ${v.temp} ` : ''}{v.pulse ? `• Pulse ${v.pulse} ` : ''}{v.spo2 ? `• SpO2 ${v.spo2}` : ''}
+                          </Text>
+                        )}
+                        {chk.clinical_notes ? <Text style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>{chk.clinical_notes}</Text> : null}
+                        {chk.follow_up_date ? (
+                          <Text style={{ fontSize: 12, color: '#B45309', fontWeight: '700', marginTop: 4 }}>
+                            {t('Follow-Up')}: {chk.follow_up_date.split('T')[0]}
+                          </Text>
+                        ) : null}
+                      </View>
+                    );
+                  })
+                )}
+
+                <Text style={[styles.sectionHeader, { marginTop: 12 }]}>🧾 {t('Pharmacy Invoices')} ({myInvoices.length})</Text>
+                {myInvoices.length === 0 ? (
+                  <Text style={{ color: '#64748B', fontSize: 13 }}>No pharmacy bills yet.</Text>
+                ) : (
+                  myInvoices.map((inv) => {
+                    const isPaid = inv.payment_status === 'paid';
+                    return (
+                      <View key={inv.id} style={styles.card}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Text style={styles.medName}>{inv.invoice_number}</Text>
+                          <View style={[styles.clinicBadge, !isPaid && { backgroundColor: '#FEF3C7' }]}>
+                            <Text style={[styles.clinicBadgeText, !isPaid && { color: '#B45309' }]}>
+                              ₹{inv.total_amount} • {isPaid ? t('Paid') : t('Unpaid')}
+                            </Text>
+                          </View>
+                        </View>
+                        {(inv.items || []).map((ln, idx) => (
+                          <Text key={idx} style={{ fontSize: 12, color: '#475569', marginTop: 3 }}>
+                            • {ln.medicine_name} × {ln.quantity} = ₹{ln.line_total}
+                          </Text>
+                        ))}
+                      </View>
+                    );
+                  })
+                )}
+              </>
             )}
           </ScrollView>
         ) : (
