@@ -127,6 +127,36 @@ export default function DoctorDashboard() {
     setTab('create');
   };
 
+  // Doctor Appointments & Calendar Blocks State
+  const [myAppointments, setMyAppointments] = useState([]);
+  const [myBlocks, setMyBlocks] = useState([]);
+  const [loadingAppts, setLoadingAppts] = useState(false);
+
+  const fetchDoctorAppointmentsAndSchedule = async () => {
+    setLoadingAppts(true);
+    try {
+      const [apptRes, schedRes] = await Promise.all([
+        axios.get(`${API_URL}/doctor/appointments`),
+        axios.get(`${API_URL}/doctor/schedule`),
+      ]);
+      if (apptRes.data?.success) setMyAppointments(apptRes.data.appointments || []);
+      if (schedRes.data?.success) setMyBlocks(schedRes.data.blocks || []);
+    } catch (e) {
+      console.log('Doctor appointments note:', e.message);
+    } finally {
+      setLoadingAppts(false);
+    }
+  };
+
+  const handleDoctorApptStatus = async (apptId, status) => {
+    try {
+      await axios.patch(`${API_URL}/doctor/appointments/${apptId}/status`, { status });
+      fetchDoctorAppointmentsAndSchedule();
+    } catch (e) {
+      alert(e.response?.data?.message || 'Failed to update status');
+    }
+  };
+
   const fetchMyPatients = async () => {
     setLoadingPatients(true);
     try {
@@ -147,6 +177,7 @@ export default function DoctorDashboard() {
   useEffect(() => {
     fetchMyPatients();
     if (tab === 'stock') fetchClinicStock();
+    if (tab === 'appointments') fetchDoctorAppointmentsAndSchedule();
   }, [tab]);
 
   const fetchPatientMedicines = async (pId) => {
@@ -662,6 +693,13 @@ export default function DoctorDashboard() {
             <Text style={[styles.tabText, tab === 'patients' && styles.activeTabText]}>{t('My Patients')}</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={[styles.tab, tab === 'appointments' && styles.activeTab]}
+            onPress={() => { setTab('appointments'); setSelectedPatient(null); setEditingMedicine(null); }}
+          >
+            <Text style={[styles.tabText, tab === 'appointments' && styles.activeTabText]}>Appointments</Text>
+          </TouchableOpacity>
+
           {hasPermission('view_clinic_stock_readonly') && (
             <TouchableOpacity
               style={[styles.tab, tab === 'stock' && styles.activeTab]}
@@ -1064,6 +1102,83 @@ export default function DoctorDashboard() {
               />
             )}
           </View>
+        ) : tab === 'appointments' ? (
+          <View style={{ flex: 1 }}>
+            {myBlocks.length > 0 && (
+              <View style={[styles.inventoryHeaderCard, { borderColor: '#FCA5A5', backgroundColor: '#FEF2F2', marginBottom: 12 }]}>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#991B1B', marginBottom: 4 }}>
+                  🚫 Upcoming Calendar Blocks ({myBlocks.length})
+                </Text>
+                {myBlocks.slice(0, 3).map((b) => (
+                  <Text key={b.id} style={{ fontSize: 12, color: '#7F1D1D' }}>
+                    • {b.block_date ? b.block_date.split('T')[0] : ''} ({b.is_full_day ? 'Full Day' : `${b.start_time}–${b.end_time}`}): {b.reason || 'Blocked'}
+                  </Text>
+                ))}
+              </View>
+            )}
+
+            {loadingAppts ? (
+              <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 32 }} />
+            ) : (
+              <FlatList
+                data={myAppointments}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => {
+                  const v = item.vitals || {};
+                  const hasVitals = v.bp || v.temp || v.pulse || v.weight;
+                  const dateDisplay = item.appointment_date ? item.appointment_date.split('T')[0] : '';
+                  return (
+                    <View style={styles.inventoryCard}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.invName}>{item.patient_name}</Text>
+                          <Text style={styles.invSub}>📞 {item.patient_phone} • {dateDisplay} at {item.slot_time}</Text>
+                          {item.reason ? <Text style={styles.invDetails}>Reason: {item.reason}</Text> : null}
+                          {hasVitals ? (
+                            <Text style={{ fontSize: 11, color: '#0F766E', fontWeight: '700', marginTop: 3 }}>
+                              Vitals: {v.bp ? `BP ${v.bp} ` : ''}{v.temp ? `• Temp ${v.temp} ` : ''}{v.pulse ? `• Pulse ${v.pulse} ` : ''}{v.weight ? `• Wt ${v.weight}` : ''}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.inStockBadge}>
+                          <Text style={styles.inStockBadgeText}>{item.status?.replace('_', ' ').toUpperCase()}</Text>
+                        </View>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                        {(item.status === 'scheduled' || item.status === 'checked_in') && (
+                          <TouchableOpacity
+                            style={styles.addStockBtn}
+                            onPress={() => handleDoctorApptStatus(item.id, 'in_consultation')}
+                          >
+                            <Text style={styles.addStockBtnText}>Start Visit</Text>
+                          </TouchableOpacity>
+                        )}
+                        {item.status === 'in_consultation' && (
+                          <TouchableOpacity
+                            style={styles.addStockBtn}
+                            onPress={() => handleDoctorApptStatus(item.id, 'completed')}
+                          >
+                            <Text style={styles.addStockBtnText}>✓ Complete Visit</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          style={styles.actionBtnEdit}
+                          onPress={() => {
+                            setPatientId(String(item.patient_id));
+                            setTab('create');
+                          }}
+                        >
+                          <Text style={styles.actionBtnEditText}>+ Prescribe</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                }}
+                ListEmptyComponent={<Text style={styles.emptyText}>No appointments scheduled for you yet.</Text>}
+              />
+            )}
+          </View>
         ) : editingMedicine ? (
            <ScrollView contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
              <View style={styles.formCard}>
@@ -1373,22 +1488,30 @@ export default function DoctorDashboard() {
            </View>
         ) : (
           <View style={{ flex: 1 }}>
-            <View style={styles.addPatientCard}>
-               <Text style={styles.h3}>{t('Add Existing Patient')}</Text>
-               <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                  <TextInput 
-                    style={[styles.input, { flex: 1, marginBottom: 0, color: '#0F172A' }]} 
-                    placeholder={t("Patient Phone No.")} 
-                    placeholderTextColor="#64748B"
-                    value={addPatientPhone}
-                    onChangeText={setAddPatientPhone}
-                    keyboardType="phone-pad"
-                  />
-                  <TouchableOpacity style={styles.addButton} onPress={handleAddPatient} disabled={addingPatient}>
-                    {addingPatient ? <ActivityIndicator color="#FFF"/> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('Add')}</Text>}
-                  </TouchableOpacity>
-               </View>
-            </View>
+            {hasPermission('assign_doctor_patient') ? (
+              <View style={styles.addPatientCard}>
+                 <Text style={styles.h3}>{t('Add Existing Patient')}</Text>
+                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                    <TextInput 
+                      style={[styles.input, { flex: 1, marginBottom: 0, color: '#0F172A' }]} 
+                      placeholder={t("Patient Phone No.")} 
+                      placeholderTextColor="#64748B"
+                      value={addPatientPhone}
+                      onChangeText={setAddPatientPhone}
+                      keyboardType="phone-pad"
+                    />
+                    <TouchableOpacity style={styles.addButton} onPress={handleAddPatient} disabled={addingPatient}>
+                      {addingPatient ? <ActivityIndicator color="#FFF"/> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('Add')}</Text>}
+                    </TouchableOpacity>
+                 </View>
+              </View>
+            ) : (
+              <View style={[styles.addPatientCard, { backgroundColor: '#F0FDFA', borderColor: '#99F6E4' }]}>
+                <Text style={{ fontSize: 12, color: '#0F766E', fontWeight: '600' }}>
+                  🔒 Patient privacy isolation is active. Only patients assigned to you by Clinic Reception appear below.
+                </Text>
+              </View>
+            )}
 
             {loadingPatients ? (
               <ActivityIndicator size="large" color="#1A9988" style={{ marginTop: 40 }} />

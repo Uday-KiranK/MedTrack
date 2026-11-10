@@ -58,6 +58,58 @@ async function runInitV3Schema() {
 
     await pool.query(`ALTER TABLE doctor_patients ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE;`);
     await pool.query(`UPDATE doctor_patients SET organization_id = 1 WHERE organization_id IS NULL;`);
+    await pool.query(`ALTER TABLE doctor_patients ADD COLUMN IF NOT EXISTS assigned_by INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+    await pool.query(`ALTER TABLE doctor_patients ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;`);
+    await pool.query(`ALTER TABLE doctor_patients ADD COLUMN IF NOT EXISTS notes TEXT;`);
+
+    // 3c. Phase 3 Doctor Schedules, Calendar Blocks & Appointments
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS doctor_schedules (
+        id SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        doctor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        day_of_week INTEGER NOT NULL,
+        start_time VARCHAR(10) NOT NULL DEFAULT '09:00',
+        end_time VARCHAR(10) NOT NULL DEFAULT '17:00',
+        slot_duration_mins INTEGER NOT NULL DEFAULT 30,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        UNIQUE (doctor_id, day_of_week)
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS doctor_calendar_blocks (
+        id SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        doctor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        block_date DATE NOT NULL,
+        start_time VARCHAR(10) NOT NULL DEFAULT '00:00',
+        end_time VARCHAR(10) NOT NULL DEFAULT '23:59',
+        is_full_day BOOLEAN NOT NULL DEFAULT FALSE,
+        reason VARCHAR(255),
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS appointments (
+        id SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        doctor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        appointment_date DATE NOT NULL,
+        slot_time VARCHAR(10) NOT NULL,
+        end_time VARCHAR(10) NOT NULL,
+        visit_type VARCHAR(32) NOT NULL DEFAULT 'consultation',
+        status VARCHAR(32) NOT NULL DEFAULT 'scheduled',
+        reason TEXT,
+        vitals JSONB DEFAULT '{}'::jsonb,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     // 3b. Phase 2 Pharmacy Stock Movements, Dispense Queue & Invoices
     await pool.query(`

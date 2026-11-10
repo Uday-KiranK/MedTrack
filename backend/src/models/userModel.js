@@ -70,23 +70,50 @@ const findUserByPhone = async (phone) => {
   return result.rows[0];
 };
 
-const linkPatientToDoctor = async (doctorId, patientId) => {
+const linkPatientToDoctor = async (doctorId, patientId, options = {}) => {
+  const { organizationId = 1, assignedBy = null, notes = null } = options;
   const result = await pool.query(
-    "INSERT INTO doctor_patients (doctor_id, patient_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING *",
-    [doctorId, patientId]
+    `INSERT INTO doctor_patients (doctor_id, patient_id, organization_id, assigned_by, is_active, notes)
+     VALUES ($1, $2, $3, $4, TRUE, $5)
+     ON CONFLICT (doctor_id, patient_id) DO UPDATE SET
+       is_active = TRUE,
+       organization_id = EXCLUDED.organization_id,
+       assigned_by = COALESCE(EXCLUDED.assigned_by, doctor_patients.assigned_by),
+       notes = COALESCE(EXCLUDED.notes, doctor_patients.notes)
+     RETURNING *`,
+    [doctorId, patientId, organizationId, assignedBy, notes]
   );
   return result.rows[0];
 };
 
-const getDoctorPatients = async (doctorId) => {
+const getDoctorPatients = async (doctorId, organizationId = 1) => {
   const result = await pool.query(
-    `SELECT u.id, u.name, u.email, u.phone 
+    `SELECT u.id, u.name, u.email, u.phone, dp.created_at AS assigned_at, dp.notes AS assignment_notes
      FROM doctor_patients dp 
      JOIN users u ON dp.patient_id = u.id 
-     WHERE dp.doctor_id = $1`,
-    [doctorId]
+     WHERE dp.doctor_id = $1
+       AND dp.organization_id = $2
+       AND COALESCE(dp.is_active, TRUE) = TRUE
+       AND u.status = 'active'
+     ORDER BY dp.created_at DESC`,
+    [doctorId, organizationId]
   );
   return result.rows;
+};
+
+const isPatientAssignedToDoctor = async (doctorId, patientId, organizationId = 1) => {
+  const res = await pool.query(
+    `SELECT 1 FROM doctor_patients dp
+     JOIN users u ON dp.patient_id = u.id
+     WHERE dp.doctor_id = $1
+       AND dp.patient_id = $2
+       AND dp.organization_id = $3
+       AND COALESCE(dp.is_active, TRUE) = TRUE
+       AND u.status = 'active'
+     LIMIT 1`,
+    [doctorId, patientId, organizationId]
+  );
+  return res.rows.length > 0;
 };
 
 const USER_PUBLIC_COLUMNS = `id, name, email, phone, role, status, organization_id, is_superadmin, permissions, specialization, breakfast_time, lunch_time, dinner_time, bedtime, ringtone_uri, routine_configured`;
@@ -145,5 +172,6 @@ module.exports = {
   findOrganizationByCode,
   updateUserProfile,
   linkPatientToDoctor, 
-  getDoctorPatients 
+  getDoctorPatients,
+  isPatientAssignedToDoctor
 };

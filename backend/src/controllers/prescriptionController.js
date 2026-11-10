@@ -10,6 +10,7 @@ const {
   recordIntake
 } = require("../models/prescriptionModel");
 const { getMedicineInfo, precacheMedicineInfoAllLangs } = require("../services/medicineInfoService");
+const { isPatientAssignedToDoctor } = require("../models/userModel");
 
 exports.createPrescription = async (req, res) => {
   try {
@@ -18,6 +19,13 @@ exports.createPrescription = async (req, res) => {
 
     if (!patientId || !Array.isArray(medicines)) {
       return res.status(400).json({ message: "Invalid data" });
+    }
+
+    const assigned = await isPatientAssignedToDoctor(req.user.id, patientId, organizationId);
+    if (!assigned) {
+      return res.status(403).json({
+        message: "Access forbidden: This patient is not assigned to you. Ask the Receptionist to assign the patient first."
+      });
     }
 
     let startDate = new Date();
@@ -136,14 +144,20 @@ exports.editMedicine = async (req, res) => {
   try {
     const { id } = req.params;
     const data = req.body;
+    const organizationId = req.user.organization_id || 1;
 
-    const checkOwernship = await pool.query(
-      "SELECT p.doctor_id FROM medicines m JOIN prescriptions p ON m.prescription_id = p.id WHERE m.id = $1",
+    const checkOwnership = await pool.query(
+      "SELECT p.doctor_id, p.patient_id FROM medicines m JOIN prescriptions p ON m.prescription_id = p.id WHERE m.id = $1",
       [id]
     );
 
-    if (checkOwernship.rows.length === 0 || checkOwernship.rows[0].doctor_id !== req.user.id) {
+    if (checkOwnership.rows.length === 0 || checkOwnership.rows[0].doctor_id !== req.user.id) {
        return res.status(403).json({ message: "Unauthorized to edit this medicine." });
+    }
+
+    const assigned = await isPatientAssignedToDoctor(req.user.id, checkOwnership.rows[0].patient_id, organizationId);
+    if (!assigned) {
+      return res.status(403).json({ message: "Access forbidden: Patient is no longer assigned to you." });
     }
 
     const updated = await editMedicine(id, data);
@@ -157,6 +171,11 @@ exports.editMedicine = async (req, res) => {
 exports.getMedicinesForDoctorPatient = async (req, res) => {
   try {
      const { patientId } = req.params;
+     const organizationId = req.user.organization_id || 1;
+     const assigned = await isPatientAssignedToDoctor(req.user.id, patientId, organizationId);
+     if (!assigned) {
+       return res.status(403).json({ message: "Access forbidden: Patient is not assigned to you." });
+     }
      const result = await getDoctorPatientPrescriptions(req.user.id, patientId);
      res.json(result);
   } catch (error) {
