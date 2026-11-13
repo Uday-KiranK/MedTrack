@@ -131,12 +131,13 @@ exports.updateDoctorSchedule = async (req, res) => {
     await client.query("BEGIN");
     const saved = [];
     for (const s of schedules) {
-      const dow = parseInt(s.day_of_week, 10);
+      const dow = parseInt(s.day_of_week !== undefined ? s.day_of_week : s.dayOfWeek, 10);
       if (Number.isNaN(dow) || dow < 0 || dow > 6) continue;
-      const startTime = s.start_time || "09:00";
-      const endTime = s.end_time || "17:00";
-      const dur = Math.max(10, Math.min(120, parseInt(s.slot_duration_mins, 10) || 30));
-      const isActive = s.is_active !== false;
+      const startTime = s.start_time || s.startTime || "09:00";
+      const endTime = s.end_time || s.endTime || "17:00";
+      const rawDur = s.slot_duration_mins !== undefined ? s.slot_duration_mins : s.slotDurationMinutes;
+      const dur = Math.max(10, Math.min(120, parseInt(rawDur, 10) || 30));
+      const isActive = (s.is_active !== undefined ? s.is_active : s.isAvailable) !== false;
 
       const upRes = await client.query(
         `INSERT INTO doctor_schedules (organization_id, doctor_id, day_of_week, start_time, end_time, slot_duration_mins, is_active)

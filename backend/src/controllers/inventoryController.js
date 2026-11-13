@@ -82,8 +82,10 @@ exports.restockItem = async (req, res) => {
   try {
     const orgId = req.user.organization_id || 1;
     const { id } = req.params;
-    const { addQuantity, batchNumber, expiryDate, notes } = req.body || {};
-    const addQty = parseInt(addQuantity, 10);
+    const { addQuantity, quantity, batchNumber, batch_number, expiryDate, expiry_date, notes } = req.body || {};
+    const addQty = parseInt(addQuantity !== undefined ? addQuantity : quantity, 10);
+    const resolvedBatch = batchNumber || batch_number || null;
+    const resolvedExpiry = expiryDate || expiry_date || null;
 
     if (!addQty || addQty <= 0) {
       return res.status(400).json({ success: false, message: "Positive addQuantity is required" });
@@ -107,7 +109,7 @@ exports.restockItem = async (req, res) => {
            updated_at = NOW()
        WHERE id = $1
        RETURNING *, GREATEST(0, stock_quantity - COALESCE(reserved_quantity, 0))::int AS available_quantity`,
-      [id, addQty, batchNumber || null, expiryDate || null]
+      [id, addQty, resolvedBatch, resolvedExpiry]
     );
 
     await inventoryModel.recordMovement(client, {

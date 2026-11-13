@@ -63,7 +63,7 @@ exports.createPrescription = async (req, res) => {
         prescription_id: prescription.id,
         medicine_name: med.medicine_name,
         dosage: med.dosage,
-        schedule_type: med.schedule_type,
+        schedule_type: med.schedule_type || 'daily',
         frequency_per_day: med.frequency_per_day || null,
         duration_days: durationDays,
         time_slots: med.time_slots || null,
