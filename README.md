@@ -1,4 +1,4 @@
-# MedTrack (Logo Not Yet Designed)
+# MedTrack
 
 A mini project designed to help patients manage prescriptions and understand lab reports through timely reminders and AI-powered summaries.
 
